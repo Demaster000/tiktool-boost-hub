@@ -89,6 +89,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <NavItem to="/video-ideas" currentPath={location.pathname}>
               Ideias para Vídeo
             </NavItem>
+            <NavItem to="/hashtag-generator" currentPath={location.pathname}>
+              Gerador de Hashtags
+            </NavItem>
             <NavItem to="/profile-analysis" currentPath={location.pathname}>
               Análise de Perfil
             </NavItem>
