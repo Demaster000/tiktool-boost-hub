@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Register = () => {
   const [name, setName] = useState("");
@@ -12,23 +12,26 @@ const Register = () => {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { signUp, user } = useAuth();
+
+  // If user is already logged in, redirect to dashboard
+  if (user) {
+    navigate("/dashboard");
+    return null;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulando registro (substituir por autenticação real com Supabase)
-    setTimeout(() => {
-      toast({
-        title: "Atenção!",
-        description: "Integração com Supabase necessária para autenticação",
-      });
-      setIsLoading(false);
-      
-      // Simulando sucesso para demonstração
+    try {
+      await signUp(email, password, name);
       navigate("/dashboard");
-    }, 1500);
+    } catch (error) {
+      // Error is handled by the auth context
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
