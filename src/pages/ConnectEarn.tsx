@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserStats } from "@/hooks/useUserStats";
+import SuccessMessage from "@/components/SuccessMessage";
 
 const ConnectEarn = () => {
   const { user } = useAuth();
@@ -24,18 +25,16 @@ const ConnectEarn = () => {
   const [isPremium, setIsPremium] = useState(false);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [pointsToAdd, setPointsToAdd] = useState(100);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [successMessage, setSuccessMessage] = useState({ title: "", message: "" });
   const { toast } = useToast();
   
   // Fetch user premium status and daily points earned
   useEffect(() => {
     if (user) {
-      const fetchPremiumStatus = async () => {
+      const checkSubscriptionStatus = async () => {
         try {
-          const { data, error } = await supabase
-            .from('subscribers')
-            .select('subscribed, points_earned_today')
-            .eq('user_id', user.id)
-            .single();
+          const { data, error } = await supabase.functions.invoke('check-subscription');
           
           if (error) throw error;
           
@@ -44,15 +43,15 @@ const ConnectEarn = () => {
             setDailyPointsEarned(data.points_earned_today || 0);
           }
         } catch (error) {
-          console.error("Error fetching premium status:", error);
+          console.error("Error fetching subscription status:", error);
         }
       };
       
-      fetchPremiumStatus();
+      checkSubscriptionStatus();
     }
   }, [user]);
 
-  // Verificar se já tem um perfil ativo ao carregar
+  // Verify if there is already an active profile
   useEffect(() => {
     const savedProfile = localStorage.getItem("activeProfile");
     if (savedProfile) {
@@ -75,10 +74,11 @@ const ConnectEarn = () => {
     setIsProfileActive(true);
     localStorage.setItem("activeProfile", profileUsername);
     
-    toast({
+    setSuccessMessage({
       title: "Perfil registrado com sucesso",
-      description: "Seu perfil foi adicionado à lista para receber seguidores.",
+      message: "Seu perfil foi adicionado à lista para receber seguidores."
     });
+    setShowSuccessMessage(true);
     
     setProfileUsername("");
   };
@@ -86,19 +86,21 @@ const ConnectEarn = () => {
   const handlePauseProfile = () => {
     setIsProfileActive(false);
     
-    toast({
+    setSuccessMessage({
       title: "Perfil pausado",
-      description: "Seu perfil não receberá mais seguidores até que você o ative novamente.",
+      message: "Seu perfil não receberá mais seguidores até que você o ative novamente."
     });
+    setShowSuccessMessage(true);
   };
 
   const handleResumeProfile = () => {
     setIsProfileActive(true);
     
-    toast({
+    setSuccessMessage({
       title: "Perfil reativado",
-      description: "Seu perfil voltou a receber seguidores.",
+      message: "Seu perfil voltou a receber seguidores."
     });
+    setShowSuccessMessage(true);
   };
 
   const handleRemoveProfile = () => {
@@ -106,10 +108,11 @@ const ConnectEarn = () => {
     setIsProfileActive(false);
     localStorage.removeItem("activeProfile");
     
-    toast({
+    setSuccessMessage({
       title: "Perfil removido",
-      description: "Seu perfil foi removido da lista de seguidores.",
+      message: "Seu perfil foi removido da lista de seguidores."
     });
+    setShowSuccessMessage(true);
   };
 
   const handleFollow = (profileId: number) => {
@@ -125,7 +128,7 @@ const ConnectEarn = () => {
 
     setIsWaitingConfirmation(profileId);
     
-    // Iniciar countdown
+    // Start countdown
     let seconds = 5;
     setCountdownSeconds(seconds);
     
@@ -138,7 +141,7 @@ const ConnectEarn = () => {
       }
     }, 1000);
     
-    // Simular abertura do TikTok em nova janela
+    // Simulate opening TikTok in a new window
     window.open("https://www.tiktok.com/", "_blank");
   };
 
@@ -152,14 +155,10 @@ const ConnectEarn = () => {
       // Update daily points earned for non-premium users
       if (!isPremium) {
         try {
-          const { error } = await supabase
-            .from('subscribers')
-            .upsert({
-              user_id: user.id,
-              points_earned_today: dailyPointsEarned + 1
-            }, { onConflict: 'user_id' });
-            
-          if (error) throw error;
+          await supabase.functions.invoke('check-subscription', {
+            body: { updatePointsEarned: true }
+          });
+          
           setDailyPointsEarned(prev => prev + 1);
         } catch (error) {
           console.error("Error updating daily points:", error);
@@ -167,10 +166,11 @@ const ConnectEarn = () => {
       }
     }
     
-    toast({
+    setSuccessMessage({
       title: "Seguimento confirmado!",
-      description: "Você ganhou 1 ponto.",
+      message: "Você ganhou 1 ponto."
     });
+    setShowSuccessMessage(true);
   };
 
   const handleBuyPoints = async () => {
@@ -282,6 +282,14 @@ const ConnectEarn = () => {
 
   return (
     <DashboardLayout>
+      {showSuccessMessage && (
+        <SuccessMessage 
+          title={successMessage.title}
+          message={successMessage.message}
+          onClose={() => setShowSuccessMessage(false)}
+        />
+      )}
+      
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Conecte e Ganhe</h1>
@@ -364,10 +372,10 @@ const ConnectEarn = () => {
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
               <Button 
                 onClick={handleBuyPoints} 
-                className="bg-tiktool-pink hover:bg-tiktool-pink/80 w-full md:w-auto"
+                className="bg-tiktool-pink hover:bg-tiktool-pink/80 w-full sm:w-auto"
                 disabled={isLoadingCheckout}
               >
-                Comprar 100 Pontos
+                {isLoadingCheckout ? "Processando..." : "Comprar 100 Pontos"}
               </Button>
             </div>
           </CardContent>
@@ -398,7 +406,7 @@ const ConnectEarn = () => {
                             <div className="flex items-center flex-wrap gap-2">
                               <p className="font-medium">{activeProfile}</p>
                               {isProfileActive ? (
-                                <Badge className="bg-tiktool-teal text-white">Ativo</Badge>
+                                <Badge variant="premium">Ativo</Badge>
                               ) : (
                                 <Badge className="bg-amber-500 text-white">Pausado</Badge>
                               )}
@@ -409,13 +417,14 @@ const ConnectEarn = () => {
                           </div>
                         </div>
                         
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-shrink-0">
                           {isProfileActive ? (
                             <Button 
                               variant="outline" 
                               size="icon"
                               onClick={handlePauseProfile}
                               title="Pausar"
+                              className="flex-shrink-0"
                             >
                               <Pause className="h-4 w-4" />
                             </Button>
@@ -425,7 +434,7 @@ const ConnectEarn = () => {
                               size="icon"
                               onClick={handleResumeProfile}
                               title="Reativar"
-                              className="text-tiktool-teal border-tiktool-teal"
+                              className="text-tiktool-teal border-tiktool-teal flex-shrink-0"
                             >
                               <UserCheck className="h-4 w-4" />
                             </Button>
@@ -434,7 +443,7 @@ const ConnectEarn = () => {
                             variant="outline" 
                             size="icon"
                             onClick={handleRemoveProfile}
-                            className="text-red-500 hover:text-red-400 border-red-500 hover:border-red-400"
+                            className="text-red-500 hover:text-red-400 border-red-500 hover:border-red-400 flex-shrink-0"
                             title="Remover"
                           >
                             <UserMinus className="h-4 w-4" />
@@ -459,7 +468,7 @@ const ConnectEarn = () => {
                         Insira seu nome de usuário do TikTok para receber seguidores.
                         Cada seguidor conquistado consumirá 1 ponto do seu saldo.
                       </p>
-                      <div className="flex gap-2">
+                      <div className="flex flex-col sm:flex-row gap-2">
                         <div className="flex-1">
                           <Input
                             placeholder="@seuusername"
@@ -470,6 +479,7 @@ const ConnectEarn = () => {
                         <Button 
                           onClick={handleRegisterProfile}
                           disabled={stats.points <= 0}
+                          className="sm:flex-shrink-0"
                         >
                           Cadastrar
                         </Button>
@@ -517,6 +527,7 @@ const ConnectEarn = () => {
                         <Button 
                           onClick={handleConfirmFollow}
                           disabled={countdownSeconds > 0}
+                          className="sm:flex-shrink-0"
                         >
                           Confirmar
                         </Button>
