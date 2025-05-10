@@ -2,7 +2,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import FeatureCard from "@/components/FeatureCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { HashtagIcon, TrendingUpIcon, UserIcon, VideoIcon } from "lucide-react";
+import { Hash, TrendingUp, User, Video } from "lucide-react";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -22,7 +22,7 @@ const Dashboard = () => {
           <FeatureCard 
             title="Conecte e Ganhe" 
             description="Troque seguidores com outros usuários e cresça sua audiência."
-            icon={<UserIcon className="text-tiktool-pink" />}
+            icon={<User className="text-tiktool-pink" />}
             to="/connect-earn"
             gradient="pink"
           />
@@ -30,7 +30,7 @@ const Dashboard = () => {
           <FeatureCard 
             title="Ideias para Vídeo" 
             description="Receba sugestões para seus próximos vídeos baseadas em tendências."
-            icon={<VideoIcon className="text-tiktool-teal" />}
+            icon={<Video className="text-tiktool-teal" />}
             to="/video-ideas"
             gradient="teal"
           />
@@ -38,7 +38,7 @@ const Dashboard = () => {
           <FeatureCard 
             title="Gerador de Hashtags" 
             description="Encontre as melhores hashtags para aumentar o alcance dos seus vídeos."
-            icon={<HashtagIcon className="text-white" />}
+            icon={<Hash className="text-white" />}
             to="/hashtag-generator"
             gradient="mixed"
           />
@@ -46,7 +46,7 @@ const Dashboard = () => {
           <FeatureCard 
             title="Análise de Perfil" 
             description="Obtenha insights detalhados sobre seu perfil e dicas personalizadas."
-            icon={<TrendingUpIcon className="text-white" />}
+            icon={<TrendingUp className="text-white" />}
             to="/profile-analysis"
             gradient="mixed"
           />
