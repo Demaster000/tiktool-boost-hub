@@ -9,4 +9,174 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Create a custom type that extends the Database type with the new tables we've created
+export type ExtendedDatabase = Database & {
+  public: {
+    Tables: {
+      challenges: {
+        Row: {
+          id: string;
+          title: string;
+          description: string;
+          type: string;
+          goal: number;
+          points: number;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          description: string;
+          type: string;
+          goal: number;
+          points: number;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          description?: string;
+          type?: string;
+          goal?: number;
+          points?: number;
+          active?: boolean;
+          created_at?: string;
+        };
+      };
+      challenge_progress: {
+        Row: {
+          id: string;
+          user_id: string;
+          challenge_id: string;
+          progress: number;
+          completed: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          challenge_id: string;
+          progress?: number;
+          completed?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          challenge_id?: string;
+          progress?: number;
+          completed?: boolean;
+          created_at?: string;
+        };
+      };
+      user_streaks: {
+        Row: {
+          id: string;
+          user_id: string;
+          current_streak: number;
+          last_completed_at: string | null;
+          points_today: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          current_streak?: number;
+          last_completed_at?: string | null;
+          points_today?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          current_streak?: number;
+          last_completed_at?: string | null;
+          points_today?: number;
+          created_at?: string;
+        };
+      };
+      badges: {
+        Row: {
+          id: string;
+          name: string;
+          description: string;
+          icon: string;
+          requirement: string;
+          code: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          description: string;
+          icon: string;
+          requirement: string;
+          code: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          description?: string;
+          icon?: string;
+          requirement?: string;
+          code?: string;
+          created_at?: string;
+        };
+      };
+      user_badges: {
+        Row: {
+          id: string;
+          user_id: string;
+          badge_id: string;
+          achieved_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          badge_id: string;
+          achieved_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          badge_id?: string;
+          achieved_at?: string;
+        };
+      };
+      tiktok_videos: {
+        Row: {
+          id: string;
+          user_id: string;
+          video_id: string;
+          title: string;
+          views: number;
+          likes: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          video_id: string;
+          title: string;
+          views?: number;
+          likes?: number;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          video_id?: string;
+          title?: string;
+          views?: number;
+          likes?: number;
+          created_at?: string;
+        };
+      };
+    } & Database['public']['Tables'];
+  };
+};
+
+export const supabase = createClient<ExtendedDatabase>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);

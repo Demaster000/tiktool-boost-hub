@@ -65,7 +65,7 @@ const DailyChallenge = () => {
         .from('challenges')
         .select('*')
         .eq('active', true)
-        .limit(5) as { data: Challenge[] | null, error: any };
+        .limit(5);
 
       if (challengeError) {
         console.error("Error fetching challenges:", challengeError);
@@ -79,10 +79,7 @@ const DailyChallenge = () => {
         .from('challenge_progress')
         .select('*')
         .eq('user_id', user.id)
-        .gte('created_at', new Date().toISOString().split('T')[0]) as { 
-          data: { challenge_id: string; progress: number; completed: boolean }[] | null, 
-          error: any 
-        };
+        .gte('created_at', new Date().toISOString().split('T')[0]);
 
       if (progressError) {
         console.error("Error fetching user progress:", progressError);
@@ -113,14 +110,7 @@ const DailyChallenge = () => {
         .from('user_streaks')
         .select('*')
         .eq('user_id', user.id)
-        .single() as { 
-          data: { 
-            current_streak: number; 
-            last_completed_at: string | null;
-            points_today: number;
-          } | null, 
-          error: any 
-        };
+        .single();
       
       if (error) {
         if (error.code === 'PGRST116') {
@@ -179,7 +169,7 @@ const DailyChallenge = () => {
       // Get all available badges
       const { data: allBadges, error: badgesError } = await supabase
         .from('badges')
-        .select('*') as { data: Badge[] | null, error: any };
+        .select('*');
       
       if (badgesError) {
         console.error("Error fetching badges:", badgesError);
@@ -192,10 +182,7 @@ const DailyChallenge = () => {
       const { data: achieved, error: userBadgesError } = await supabase
         .from('user_badges')
         .select('*')
-        .eq('user_id', user.id) as { 
-          data: UserBadge[] | null, 
-          error: any 
-        };
+        .eq('user_id', user.id);
 
       if (userBadgesError) {
         console.error("Error fetching user badges:", userBadgesError);
@@ -231,10 +218,7 @@ const DailyChallenge = () => {
         .eq('user_id', user.id)
         .eq('challenge_id', challenge.id)
         .gte('created_at', new Date().toISOString().split('T')[0])
-        .single() as { 
-          data: { id: string } | null, 
-          error: any 
-        };
+        .single();
       
       if (progressError && progressError.code !== 'PGRST116') {
         console.error("Error checking challenge progress:", progressError);
@@ -282,14 +266,7 @@ const DailyChallenge = () => {
           .from('user_streaks')
           .select('*')
           .eq('user_id', user.id)
-          .single() as { 
-            data: { 
-              current_streak: number; 
-              last_completed_at: string | null;
-              points_today: number;
-            } | null, 
-            error: any 
-          };
+          .single();
         
         if (streakError) {
           console.error("Error getting streak info:", streakError);
@@ -423,7 +400,7 @@ const DailyChallenge = () => {
         .from('badges')
         .select('id')
         .eq('code', badgeCode)
-        .single() as { data: { id: string } | null, error: any };
+        .single();
       
       if (badgeError) {
         console.error("Error finding badge:", badgeError);
@@ -438,7 +415,7 @@ const DailyChallenge = () => {
         .select('*')
         .eq('user_id', user.id)
         .eq('badge_id', badge.id)
-        .single() as { data: UserBadge | null, error: any };
+        .single();
       
       if (existingBadgeError && existingBadgeError.code !== 'PGRST116') {
         console.error("Error checking existing badge:", existingBadgeError);

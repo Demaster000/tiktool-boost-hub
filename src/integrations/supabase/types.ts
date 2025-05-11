@@ -72,6 +72,36 @@ export type Database = {
         }
         Relationships: []
       }
+      tiktok_videos: {
+        Row: {
+          created_at: string | null
+          id: string
+          likes: number | null
+          title: string
+          user_id: string
+          video_id: string
+          views: number | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          likes?: number | null
+          title: string
+          user_id: string
+          video_id: string
+          views?: number | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          likes?: number | null
+          title?: string
+          user_id?: string
+          video_id?: string
+          views?: number | null
+        }
+        Relationships: []
+      }
       user_profiles: {
         Row: {
           active: boolean
@@ -134,7 +164,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      create_tiktok_videos_table_if_not_exists: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
