@@ -7,18 +7,21 @@ export interface SubscriptionStatus {
   points_earned_today?: number;
 }
 
-export interface PurchasePointsOptions {
+export interface BaseCheckoutOptions {
+  mode: 'payment' | 'subscription';
+}
+
+export interface PurchasePointsOptions extends BaseCheckoutOptions {
   mode: 'payment';
   points: number;
 }
 
-export interface SubscribeOptions {
+export interface SubscribeOptions extends BaseCheckoutOptions {
   mode: 'subscription';
 }
 
-export interface CheckoutOptions extends Partial<PurchasePointsOptions>, Partial<SubscribeOptions> {
-  mode: 'payment' | 'subscription';
-}
+// Use type union instead of extending incompatible interfaces
+export type CheckoutOptions = PurchasePointsOptions | SubscribeOptions;
 
 export interface SessionResponse {
   url: string;
