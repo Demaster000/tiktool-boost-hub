@@ -93,9 +93,72 @@ serve(async (req) => {
               .from("user_statistics")
               .update({ points: stats.points + pointsToAdd })
               .eq("user_id", userId);
+
+            console.log(`✅ User ${userId} purchased ${pointsToAdd} points`);
           }
+        }
+        break;
+      }
+      
+      case "customer.subscription.created": {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+        
+        // Get subscription details
+        const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        
+        // Find the user associated with this customer
+        const { data: customers } = await supabaseAdmin
+          .from("subscribers")
+          .select("user_id")
+          .eq("stripe_customer_id", customerId);
+        
+        if (customers && customers.length > 0) {
+          const userId = customers[0].user_id;
           
-          console.log(`✅ User ${userId} purchased ${pointsToAdd} points`);
+          // Update the subscriber status
+          await supabaseAdmin
+            .from("subscribers")
+            .update({
+              subscribed: true,
+              subscription_tier: "Premium",
+              subscription_end: subscriptionEnd,
+              updated_at: new Date().toISOString()
+            })
+            .eq("user_id", userId);
+          
+          console.log(`✅ Subscription created for user ${userId}, expires at ${subscriptionEnd}`);
+        }
+        break;
+      }
+      
+      case "customer.subscription.updated": {
+        const subscription = event.data.object;
+        const customerId = subscription.customer;
+        const status = subscription.status;
+        const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+        
+        // Find the user associated with this customer
+        const { data: customers } = await supabaseAdmin
+          .from("subscribers")
+          .select("user_id")
+          .eq("stripe_customer_id", customerId);
+        
+        if (customers && customers.length > 0) {
+          const userId = customers[0].user_id;
+          
+          // Update the subscriber status
+          await supabaseAdmin
+            .from("subscribers")
+            .update({
+              subscribed: status === "active" || status === "trialing",
+              subscription_tier: (status === "active" || status === "trialing") ? "Premium" : null,
+              subscription_end: subscriptionEnd,
+              updated_at: new Date().toISOString()
+            })
+            .eq("user_id", userId);
+          
+          console.log(`✅ Subscription updated for user ${userId}, status: ${status}, expires at ${subscriptionEnd}`);
         }
         break;
       }
@@ -124,7 +187,43 @@ serve(async (req) => {
             })
             .eq("user_id", userId);
           
-          console.log(`✅ User subscription canceled for user ${userId}`);
+          console.log(`✅ Subscription canceled for user ${userId}`);
+        }
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object;
+        const customerId = invoice.customer;
+        const subscriptionId = invoice.subscription;
+
+        if (subscriptionId) {
+          // This is a subscription invoice
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId as string);
+          const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
+          
+          // Find the user associated with this customer
+          const { data: customers } = await supabaseAdmin
+            .from("subscribers")
+            .select("user_id")
+            .eq("stripe_customer_id", customerId);
+          
+          if (customers && customers.length > 0) {
+            const userId = customers[0].user_id;
+            
+            // Update the subscriber status
+            await supabaseAdmin
+              .from("subscribers")
+              .update({
+                subscribed: true,
+                subscription_tier: "Premium",
+                subscription_end: subscriptionEnd,
+                updated_at: new Date().toISOString()
+              })
+              .eq("user_id", userId);
+            
+            console.log(`✅ Invoice payment succeeded for user ${userId}, subscription renewed until ${subscriptionEnd}`);
+          }
         }
         break;
       }

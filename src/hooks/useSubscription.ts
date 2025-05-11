@@ -52,6 +52,19 @@ export const useSubscription = () => {
     return () => clearInterval(interval);
   }, [user]);
 
+  // Also check when URL changes (after checkout)
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const success = url.searchParams.get('success');
+    
+    if (success === 'true') {
+      checkSubscription();
+      
+      // Clear URL params after successful checkout
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   return {
     status,
     loading,

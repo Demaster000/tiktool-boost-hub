@@ -50,10 +50,11 @@ serve(async (req) => {
       customerId = customer.id;
     }
 
-    const { mode, points = 100 } = await req.json();
+    const requestBody = await req.json();
+    const { mode } = requestBody;
     
     if (mode === 'subscription') {
-      // Create subscription checkout session
+      // Create subscription checkout session with trial period
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
@@ -80,6 +81,7 @@ serve(async (req) => {
           user_id: user.id
         },
         subscription_data: {
+          trial_period_days: 7, // 7 day free trial
           metadata: {
             user_id: user.id
           }
@@ -92,6 +94,19 @@ serve(async (req) => {
       });
     } else {
       // One-time payment for points
+      const points = requestBody.points || 100;
+      
+      // Calculate price based on points
+      let unitAmount = 1990; // Default 19.90 for 100 points
+
+      if (points === 300) {
+        unitAmount = 4990; // 49.90 for 300 points
+      } else if (points === 500) {
+        unitAmount = 7990; // 79.90 for 500 points
+      } else if (points === 1000) {
+        unitAmount = 14990; // 149.90 for 1000 points
+      }
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
@@ -103,7 +118,7 @@ serve(async (req) => {
                 name: `${points} Pontos TikTool`,
                 description: "Pontos para receber seguidores no TikTok",
               },
-              unit_amount: points === 100 ? 1990 : 4990, // R$ 19,90 para 100 pontos ou R$ 49,90 para 300 pontos
+              unit_amount: unitAmount,
             },
             quantity: 1,
           },

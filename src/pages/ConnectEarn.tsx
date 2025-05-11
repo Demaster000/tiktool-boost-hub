@@ -6,50 +6,68 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { User, UserCheck, UserMinus, Pause, AlertCircle, CheckCircle } from "lucide-react";
+import { User, UserCheck, UserMinus, Pause, AlertCircle, CheckCircle, Star, Award } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserStats } from "@/hooks/useUserStats";
 import SuccessMessage from "@/components/SuccessMessage";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import useSubscription from "@/hooks/useSubscription";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const ConnectEarn = () => {
   const { user } = useAuth();
   const { stats, updateStat } = useUserStats();
+  const { status: subscriptionStatus, loading: subscriptionLoading } = useSubscription();
   const [profileUsername, setProfileUsername] = useState("");
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
   const [isProfileActive, setIsProfileActive] = useState(false);
   const [isWaitingConfirmation, setIsWaitingConfirmation] = useState<number | null>(null);
   const [countdownSeconds, setCountdownSeconds] = useState(5);
-  const [dailyPointsEarned, setDailyPointsEarned] = useState(0);
   const [isPremium, setIsPremium] = useState(false);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [pointsToAdd, setPointsToAdd] = useState(100);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [successMessage, setSuccessMessage] = useState({ title: "", message: "" });
+  const [showAdPopup, setShowAdPopup] = useState(false);
+  const [adPopupTimer, setAdPopupTimer] = useState(10);
+  const [showPointsPopover, setShowPointsPopover] = useState(false);
   const { toast } = useToast();
   
   // Fetch user premium status and daily points earned
   useEffect(() => {
     if (user) {
-      const checkSubscriptionStatus = async () => {
-        try {
-          const { data, error } = await supabase.functions.invoke('check-subscription');
-          
-          if (error) throw error;
-          
-          if (data) {
-            setIsPremium(data.subscribed || false);
-            setDailyPointsEarned(data.points_earned_today || 0);
-          }
-        } catch (error) {
-          console.error("Error fetching subscription status:", error);
-        }
-      };
-      
-      checkSubscriptionStatus();
+      setIsPremium(subscriptionStatus.subscribed || false);
     }
-  }, [user]);
+  }, [user, subscriptionStatus]);
+
+  // Show ad popup for free users after 60 seconds
+  useEffect(() => {
+    if (!isPremium && !showAdPopup) {
+      const timer = setTimeout(() => {
+        setShowAdPopup(true);
+      }, 60000); // Show after 60 seconds
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isPremium, showAdPopup]);
+
+  // Ad popup countdown timer
+  useEffect(() => {
+    if (showAdPopup && adPopupTimer > 0) {
+      const timer = setTimeout(() => {
+        setAdPopupTimer(prev => prev - 1);
+      }, 1000);
+      
+      return () => clearTimeout(timer);
+    } else if (showAdPopup && adPopupTimer === 0) {
+      setShowAdPopup(false);
+      setAdPopupTimer(10);
+    }
+  }, [showAdPopup, adPopupTimer]);
 
   // Verify if there is already an active profile
   useEffect(() => {
@@ -59,6 +77,15 @@ const ConnectEarn = () => {
       setIsProfileActive(true);
     }
   }, []);
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return null;
+    try {
+      return format(new Date(dateString), "d 'de' MMMM, yyyy", { locale: ptBR });
+    } catch (error) {
+      return dateString;
+    }
+  };
 
   const handleRegisterProfile = () => {
     if (!profileUsername) {
@@ -117,7 +144,7 @@ const ConnectEarn = () => {
 
   const handleFollow = (profileId: number) => {
     // Check daily points limit for non-premium users
-    if (!isPremium && dailyPointsEarned >= 30) {
+    if (!isPremium && subscriptionStatus.points_earned_today && subscriptionStatus.points_earned_today >= 30) {
       toast({
         title: "Limite diário atingido",
         description: "Você atingiu o limite de 30 pontos diários. Assine o plano Premium para remover esta limitação.",
@@ -151,19 +178,6 @@ const ConnectEarn = () => {
     if (user) {
       // Update points
       await updateStat("points", stats.points + 1);
-      
-      // Update daily points earned for non-premium users
-      if (!isPremium) {
-        try {
-          await supabase.functions.invoke('check-subscription', {
-            body: { updatePointsEarned: true }
-          });
-          
-          setDailyPointsEarned(prev => prev + 1);
-        } catch (error) {
-          console.error("Error updating daily points:", error);
-        }
-      }
     }
     
     setSuccessMessage({
@@ -290,6 +304,63 @@ const ConnectEarn = () => {
         />
       )}
       
+      {/* Ad Popup for Free Users */}
+      <Dialog open={showAdPopup} onOpenChange={setShowAdPopup}>
+        <DialogContent className="bg-gradient-to-br from-tiktool-dark to-tiktool-gray border-tiktool-teal/30">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <Award className="text-amber-400" />
+              <span>Potencialize seu crescimento no TikTok!</span>
+            </DialogTitle>
+            <DialogDescription>
+              Assine o plano Premium e tenha acesso ilimitado a todas as ferramentas
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-black/30 rounded-md">
+              <p className="mb-2 font-medium">Com o plano Premium você tem:</p>
+              <ul className="space-y-2">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="text-tiktool-teal h-4 w-4" />
+                  <span>Ganho ilimitado de pontos diários</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="text-tiktool-teal h-4 w-4" />
+                  <span>Prioridade na exibição do seu perfil</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="text-tiktool-teal h-4 w-4" />
+                  <span>Bônus de 200 pontos ao assinar</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="text-tiktool-teal h-4 w-4" />
+                  <span>Sem anúncios como este</span>
+                </li>
+              </ul>
+            </div>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-muted-foreground">
+                Este anúncio fechará em {adPopupTimer} segundos
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setShowAdPopup(false)}>
+                  Fechar
+                </Button>
+                <Button 
+                  className="bg-gradient-to-r from-tiktool-pink to-tiktool-teal hover:opacity-90"
+                  onClick={() => {
+                    setShowAdPopup(false);
+                    handleSubscribe();
+                  }}
+                >
+                  Assinar Premium
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Conecte e Ganhe</h1>
@@ -302,7 +373,12 @@ const ConnectEarn = () => {
               <CheckCircle className="text-tiktool-teal h-5 w-5" />
               <span className="font-medium">Conta Premium Ativa</span>
             </div>
-            <p className="text-sm">Você não possui limite diário para ganhar pontos e seu perfil tem prioridade na exibição.</p>
+            <div className="space-y-2">
+              <p className="text-sm">Você não possui limite diário para ganhar pontos e seu perfil tem prioridade na exibição.</p>
+              {subscriptionStatus.subscription_end && (
+                <p className="text-sm">Seu plano Premium é válido até <span className="font-medium">{formatDate(subscriptionStatus.subscription_end)}</span></p>
+              )}
+            </div>
             <Button 
               variant="outline" 
               size="sm" 
@@ -316,10 +392,16 @@ const ConnectEarn = () => {
         )}
         
         {!isPremium && (
-          <Card className="bg-gradient-to-r from-tiktool-pink/10 to-tiktool-teal/10 border-tiktool-teal/20">
+          <Card className="bg-gradient-to-r from-tiktool-pink/10 to-tiktool-teal/10 border-tiktool-teal/20 relative overflow-hidden">
+            <div className="absolute -right-4 top-0 rotate-45 transform translate-y-2 bg-gradient-to-r from-amber-400 to-amber-500 text-white text-xs py-1 px-8 font-semibold">
+              Recomendado
+            </div>
             <CardHeader>
-              <CardTitle>Assine o Plano Premium</CardTitle>
-              <CardDescription>Por apenas R$ 29,90/mês</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Star className="text-amber-400 h-5 w-5" />
+                Assine o Plano Premium
+              </CardTitle>
+              <CardDescription>Por apenas R$ 29,90/mês com 7 dias de teste grátis</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -335,13 +417,20 @@ const ConnectEarn = () => {
                   <CheckCircle className="text-tiktool-teal h-5 w-5" />
                   <span>Bônus de 200 pontos ao assinar</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="text-tiktool-teal h-5 w-5" />
+                  <span>Sem anúncios</span>
+                </div>
                 <Button 
-                  className="w-full bg-tiktool-teal hover:bg-tiktool-teal/80" 
+                  className="w-full bg-gradient-to-r from-tiktool-pink to-tiktool-teal hover:opacity-90" 
                   onClick={handleSubscribe}
                   disabled={isLoadingCheckout}
                 >
-                  {isLoadingCheckout ? "Processando..." : "Assinar Premium"}
+                  {isLoadingCheckout ? "Processando..." : "Começar teste grátis de 7 dias"}
                 </Button>
+                <p className="text-xs text-center text-muted-foreground">
+                  Cancele a qualquer momento durante o período de teste sem custos
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -357,25 +446,89 @@ const ConnectEarn = () => {
               <p className="text-4xl font-bold">{stats.points} pontos</p>
               <p className="text-sm text-muted-foreground">1 ponto = 1 seguidor</p>
               
-              {!isPremium && (
+              {!isPremium && subscriptionStatus.points_earned_today !== undefined && (
                 <div className="mt-2 text-sm">
                   <div className="flex items-center gap-2">
                     <AlertCircle className="text-amber-400 h-4 w-4" />
                     <span>
-                      {dailyPointsEarned}/30 pontos ganhos hoje
-                      {dailyPointsEarned >= 30 && " (limite atingido)"}
+                      {subscriptionStatus.points_earned_today}/30 pontos ganhos hoje
+                      {subscriptionStatus.points_earned_today >= 30 && " (limite atingido)"}
                     </span>
                   </div>
                 </div>
               )}
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+              <Popover open={showPointsPopover} onOpenChange={setShowPointsPopover}>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
+                    Escolher quantidade
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-4 bg-tiktool-gray border-tiktool-gray/50">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Selecione a quantidade</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button 
+                          variant={pointsToAdd === 100 ? "default" : "outline"}
+                          className={pointsToAdd === 100 ? "bg-tiktool-pink hover:bg-tiktool-pink/80" : ""} 
+                          onClick={() => setPointsToAdd(100)}
+                        >
+                          100 pontos
+                        </Button>
+                        <Button 
+                          variant={pointsToAdd === 300 ? "default" : "outline"}
+                          className={pointsToAdd === 300 ? "bg-tiktool-teal hover:bg-tiktool-teal/80" : ""} 
+                          onClick={() => setPointsToAdd(300)}
+                        >
+                          300 pontos
+                        </Button>
+                        <Button 
+                          variant={pointsToAdd === 500 ? "default" : "outline"}
+                          className={pointsToAdd === 500 ? "bg-tiktool-pink hover:bg-tiktool-pink/80" : ""} 
+                          onClick={() => setPointsToAdd(500)}
+                        >
+                          500 pontos
+                        </Button>
+                        <Button 
+                          variant={pointsToAdd === 1000 ? "default" : "outline"}
+                          className={pointsToAdd === 1000 ? "bg-tiktool-teal hover:bg-tiktool-teal/80" : ""}
+                          onClick={() => setPointsToAdd(1000)}
+                        >
+                          1000 pontos
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="pt-2 text-center border-t border-border">
+                      <span className="text-sm text-muted-foreground">
+                        {pointsToAdd === 100 && "R$ 19,90"}
+                        {pointsToAdd === 300 && "R$ 49,90"}
+                        {pointsToAdd === 500 && "R$ 79,90"}
+                        {pointsToAdd === 1000 && "R$ 149,90"}
+                      </span>
+                    </div>
+                    <Button 
+                      className="w-full bg-tiktool-pink hover:bg-tiktool-pink/80"
+                      onClick={() => {
+                        setShowPointsPopover(false);
+                        handleBuyPoints();
+                      }}
+                    >
+                      Confirmar
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Button 
                 onClick={handleBuyPoints} 
                 className="bg-tiktool-pink hover:bg-tiktool-pink/80 w-full sm:w-auto"
                 disabled={isLoadingCheckout}
               >
-                {isLoadingCheckout ? "Processando..." : "Comprar 100 Pontos"}
+                {isLoadingCheckout ? "Processando..." : `Comprar ${pointsToAdd} Pontos`}
               </Button>
             </div>
           </CardContent>
