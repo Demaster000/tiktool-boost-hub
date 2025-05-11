@@ -42,7 +42,7 @@ const DailyChallenge = () => {
   const [dailyChallenges, setDailyChallenges] = useState<Challenge[]>([]);
   const [streakInfo, setStreakInfo] = useState({ 
     currentStreak: 0, 
-    lastCompleted: null,
+    lastCompleted: null, 
     pointsToday: 0,
     pointsLimit: 50,
     bonusPoints: 0
@@ -61,20 +61,32 @@ const DailyChallenge = () => {
     
     try {
       // Get today's challenges
-      const { data: challenges } = await supabase
+      const { data: challenges, error: challengeError } = await supabase
         .from('challenges')
         .select('*')
         .eq('active', true)
-        .limit(5);
+        .limit(5) as { data: Challenge[] | null, error: any };
+
+      if (challengeError) {
+        console.error("Error fetching challenges:", challengeError);
+        return;
+      }
       
       if (!challenges) return;
       
       // Get user progress for these challenges
-      const { data: userProgress } = await supabase
+      const { data: userProgress, error: progressError } = await supabase
         .from('challenge_progress')
         .select('*')
         .eq('user_id', user.id)
-        .gte('created_at', new Date().toISOString().split('T')[0]);
+        .gte('created_at', new Date().toISOString().split('T')[0]) as { 
+          data: { challenge_id: string; progress: number; completed: boolean }[] | null, 
+          error: any 
+        };
+
+      if (progressError) {
+        console.error("Error fetching user progress:", progressError);
+      }
         
       // Merge progress with challenges
       const mergedChallenges = challenges.map(challenge => {
@@ -97,11 +109,47 @@ const DailyChallenge = () => {
     if (!user) return;
     
     try {
-      const { data: streak } = await supabase
+      const { data: streak, error } = await supabase
         .from('user_streaks')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .single() as { 
+          data: { 
+            current_streak: number; 
+            last_completed_at: string | null;
+            points_today: number;
+          } | null, 
+          error: any 
+        };
+      
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // No streak found, initialize new user streak
+          const { error: insertError } = await supabase
+            .from('user_streaks')
+            .insert({
+              user_id: user.id,
+              current_streak: 0,
+              last_completed_at: null,
+              points_today: 0
+            });
+          
+          if (insertError) {
+            console.error("Error initializing streak:", insertError);
+          } else {
+            setStreakInfo({
+              currentStreak: 0,
+              lastCompleted: null,
+              pointsToday: 0,
+              pointsLimit: 50,
+              bonusPoints: 0
+            });
+          }
+        } else {
+          console.error("Error fetching streak:", error);
+        }
+        return;
+      }
       
       if (streak) {
         // Calculate bonus points (10 per streak day)
@@ -117,27 +165,6 @@ const DailyChallenge = () => {
         
         // Check if daily limit reached
         setDailyLimitReached(streak.points_today >= 50);
-      } else {
-        // Initialize new user streak
-        const { data } = await supabase
-          .from('user_streaks')
-          .insert({
-            user_id: user.id,
-            current_streak: 0,
-            last_completed_at: null,
-            points_today: 0
-          })
-          .select();
-        
-        if (data) {
-          setStreakInfo({
-            currentStreak: 0,
-            lastCompleted: null,
-            pointsToday: 0,
-            pointsLimit: 50,
-            bonusPoints: 0
-          });
-        }
       }
     } catch (error) {
       console.error("Error fetching streak info:", error);
@@ -150,17 +177,29 @@ const DailyChallenge = () => {
     
     try {
       // Get all available badges
-      const { data: allBadges } = await supabase
+      const { data: allBadges, error: badgesError } = await supabase
         .from('badges')
-        .select('*');
+        .select('*') as { data: Badge[] | null, error: any };
+      
+      if (badgesError) {
+        console.error("Error fetching badges:", badgesError);
+        return;
+      }
       
       if (!allBadges) return;
       
       // Get user badges
-      const { data: achieved } = await supabase
+      const { data: achieved, error: userBadgesError } = await supabase
         .from('user_badges')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id) as { 
+          data: UserBadge[] | null, 
+          error: any 
+        };
+
+      if (userBadgesError) {
+        console.error("Error fetching user badges:", userBadgesError);
+      }
       
       setUserBadges(achieved || []);
       
@@ -186,26 +225,39 @@ const DailyChallenge = () => {
       const completed = newProgress >= challenge.goal;
       
       // Update challenge progress
-      const { data } = await supabase
+      const { data, error: progressError } = await supabase
         .from('challenge_progress')
         .select('*')
         .eq('user_id', user.id)
         .eq('challenge_id', challenge.id)
         .gte('created_at', new Date().toISOString().split('T')[0])
-        .single();
+        .single() as { 
+          data: { id: string } | null, 
+          error: any 
+        };
+      
+      if (progressError && progressError.code !== 'PGRST116') {
+        console.error("Error checking challenge progress:", progressError);
+        return;
+      }
       
       if (data) {
         // Update existing progress
-        await supabase
+        const { error: updateError } = await supabase
           .from('challenge_progress')
           .update({ 
             progress: newProgress,
             completed
           })
           .eq('id', data.id);
+        
+        if (updateError) {
+          console.error("Error updating progress:", updateError);
+          return;
+        }
       } else {
         // Create new progress entry
-        await supabase
+        const { error: insertError } = await supabase
           .from('challenge_progress')
           .insert({
             user_id: user.id,
@@ -213,6 +265,11 @@ const DailyChallenge = () => {
             progress: newProgress,
             completed
           });
+        
+        if (insertError) {
+          console.error("Error inserting progress:", insertError);
+          return;
+        }
       }
       
       // If challenge is completed, add points
@@ -221,14 +278,26 @@ const DailyChallenge = () => {
         const pointsToAdd = challenge.points;
         
         // Get current streak info
-        const { data: currentStreak } = await supabase
+        const { data: currentStreak, error: streakError } = await supabase
           .from('user_streaks')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .single() as { 
+            data: { 
+              current_streak: number; 
+              last_completed_at: string | null;
+              points_today: number;
+            } | null, 
+            error: any 
+          };
+        
+        if (streakError) {
+          console.error("Error getting streak info:", streakError);
+          return;
+        }
         
         if (currentStreak) {
-          const newPointsToday = currentStreak.points_today + pointsToAdd;
+          const newPointsToday = (currentStreak.points_today || 0) + pointsToAdd;
           const today = new Date().toISOString().split('T')[0];
           const lastCompleted = currentStreak.last_completed_at?.split('T')[0];
           
@@ -253,7 +322,7 @@ const DailyChallenge = () => {
           }
           
           // Update streak info
-          await supabase
+          const { error: updateStreakError } = await supabase
             .from('user_streaks')
             .update({
               current_streak: newStreak,
@@ -261,6 +330,11 @@ const DailyChallenge = () => {
               points_today: newPointsToday
             })
             .eq('user_id', user.id);
+          
+          if (updateStreakError) {
+            console.error("Error updating streak info:", updateStreakError);
+            return;
+          }
           
           // Update user statistics
           if (stats) {
@@ -345,31 +419,46 @@ const DailyChallenge = () => {
     
     try {
       // Get the badge ID
-      const { data: badge } = await supabase
+      const { data: badge, error: badgeError } = await supabase
         .from('badges')
         .select('id')
         .eq('code', badgeCode)
-        .single();
+        .single() as { data: { id: string } | null, error: any };
+      
+      if (badgeError) {
+        console.error("Error finding badge:", badgeError);
+        return;
+      }
       
       if (!badge) return;
       
       // Check if user already has this badge
-      const { data: existingBadge } = await supabase
+      const { data: existingBadge, error: existingBadgeError } = await supabase
         .from('user_badges')
         .select('*')
         .eq('user_id', user.id)
         .eq('badge_id', badge.id)
-        .single();
+        .single() as { data: UserBadge | null, error: any };
+      
+      if (existingBadgeError && existingBadgeError.code !== 'PGRST116') {
+        console.error("Error checking existing badge:", existingBadgeError);
+        return;
+      }
       
       if (existingBadge) return;
       
       // Award the badge
-      await supabase
+      const { error: awardError } = await supabase
         .from('user_badges')
         .insert({
           user_id: user.id,
           badge_id: badge.id
         });
+      
+      if (awardError) {
+        console.error("Error awarding badge:", awardError);
+        return;
+      }
       
       // Show toast notification
       toast({

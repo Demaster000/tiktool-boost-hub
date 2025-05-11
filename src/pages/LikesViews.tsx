@@ -3,207 +3,226 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
-import { useUserStats } from "@/hooks/useUserStats";
-import { Eye, ThumbsUp, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Loader2, Award, ThumbsUp, Eye, Flame } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUserStats } from "@/hooks/useUserStats";
 
 interface TikTokVideo {
   id: string;
-  url: string;
   user_id: string;
-  created_at: string;
-  likes: number;
+  video_id: string;
+  title: string;
   views: number;
+  likes: number;
+  created_at: string;
   username?: string;
 }
 
 const LikesViews = () => {
   const [videoUrl, setVideoUrl] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [recentVideos, setRecentVideos] = useState<TikTokVideo[]>([]);
   const [topLiked, setTopLiked] = useState<TikTokVideo[]>([]);
   const [topViewed, setTopViewed] = useState<TikTokVideo[]>([]);
+  const [userVideos, setUserVideos] = useState<TikTokVideo[]>([]);
   const { user } = useAuth();
-  const { stats, updateStat } = useUserStats();
+  const { updateStat } = useUserStats();
 
-  // Extract TikTok video ID from URL
-  const extractVideoId = (url: string) => {
+  useEffect(() => {
+    if (user) {
+      fetchVideos();
+    }
+  }, [user]);
+
+  const fetchVideos = async () => {
     try {
-      // Handle direct video URLs
-      const directMatch = url.match(/\/video\/(\d+)/);
-      if (directMatch) return directMatch[1];
+      // Create the tiktok_videos table if it doesn't exist yet
+      await supabase.rpc('create_tiktok_videos_table_if_not_exists').catch(e => {
+        console.error("Error creating table:", e);
+      });
 
-      // Handle share URLs with parameters
-      const urlObj = new URL(url);
-      if (urlObj.pathname.includes('/t/')) {
-        return urlObj.pathname.split('/').pop();
+      // Fetch recent videos
+      const { data: recent } = await supabase
+        .from('tiktok_videos')
+        .select('*, profiles:user_id(username)')
+        .order('created_at', { ascending: false })
+        .limit(10) as { data: any[] | null };
+
+      if (recent) {
+        setRecentVideos(recent.map(v => ({
+          ...v,
+          username: v.profiles?.username
+        })));
+      }
+
+      // Fetch top liked videos
+      const { data: liked } = await supabase
+        .from('tiktok_videos')
+        .select('*, profiles:user_id(username)')
+        .order('likes', { ascending: false })
+        .limit(10) as { data: any[] | null };
+
+      if (liked) {
+        setTopLiked(liked.map(v => ({
+          ...v,
+          username: v.profiles?.username
+        })));
+      }
+
+      // Fetch top viewed videos
+      const { data: viewed } = await supabase
+        .from('tiktok_videos')
+        .select('*, profiles:user_id(username)')
+        .order('views', { ascending: false })
+        .limit(10) as { data: any[] | null };
+
+      if (viewed) {
+        setTopViewed(viewed.map(v => ({
+          ...v,
+          username: v.profiles?.username
+        })));
+      }
+
+      // Fetch user's videos
+      if (user) {
+        const { data: myVideos } = await supabase
+          .from('tiktok_videos')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false }) as { data: TikTokVideo[] | null };
+
+        if (myVideos) {
+          setUserVideos(myVideos);
+        }
+      }
+    } catch (error: any) {
+      console.error("Error fetching videos:", error);
+    }
+  };
+
+  const submitVideo = async () => {
+    if (!videoUrl.trim() || !user) return;
+    
+    setIsLoading(true);
+    
+    try {
+      // Extract video ID and validate TikTok URL
+      const regex = /tiktok\.com\/@[\w\.]+\/video\/(\d+)/;
+      const match = videoUrl.match(regex);
+      
+      if (!match || !match[1]) {
+        toast({
+          title: "URL inválida",
+          description: "Por favor insira um link válido do TikTok (ex: https://www.tiktok.com/@username/video/1234567890)",
+          variant: "destructive"
+        });
+        return;
       }
       
-      return null;
-    } catch {
-      return null;
-    }
-  };
-  
-  // Extract username from URL
-  const extractUsername = (url: string) => {
-    try {
-      const match = url.match(/@([^\/]+)/);
-      return match ? match[1] : "username";
-    } catch {
-      return "username";
-    }
-  };
-
-  // Submit video
-  const submitVideo = async () => {
-    if (!user) return;
-    
-    const videoId = extractVideoId(videoUrl);
-    const username = extractUsername(videoUrl);
-    
-    if (!videoId) {
-      toast({
-        title: "URL inválida",
-        description: "Por favor, insira uma URL válida do TikTok",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
+      const videoId = match[1];
+      
+      // Check if video already exists
+      const { data: existingVideo } = await supabase
+        .from('tiktok_videos')
+        .select('*')
+        .eq('video_id', videoId)
+        .single() as { data: TikTokVideo | null };
+      
+      if (existingVideo) {
+        toast({
+          title: "Vídeo já existe",
+          description: "Este vídeo já foi adicionado ao sistema",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Add video to database
+      const { error } = await supabase
         .from('tiktok_videos')
         .insert({
-          url: videoUrl,
-          video_id: videoId,
-          username: username,
           user_id: user.id,
-          likes: 0,
-          views: 0
-        })
-        .select();
+          video_id: videoId,
+          title: `Vídeo de ${user.email?.split('@')[0] || 'usuário'}`,
+          views: 0,
+          likes: 0
+        });
       
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
       
       toast({
-        title: "Vídeo enviado com sucesso",
-        description: "Seu vídeo foi adicionado à comunidade"
+        title: "Vídeo adicionado com sucesso!",
+        description: "Seu vídeo foi adicionado e agora pode receber likes e visualizações",
       });
       
       setVideoUrl("");
-      fetchVideos(); // Refresh videos
+      fetchVideos();
+      
+      // Add points to user
+      await updateStat('points', 5);
+      
     } catch (error: any) {
       toast({
-        title: "Erro ao enviar vídeo",
+        title: "Erro ao adicionar vídeo",
         description: error.message,
         variant: "destructive"
       });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
-  // Like a video
-  const likeVideo = async (video: TikTokVideo) => {
+  const incrementView = async (video: TikTokVideo) => {
     if (!user) return;
     
     try {
-      // Check if user already liked this video
-      const { data: existingLike } = await supabase
-        .from('video_interactions')
-        .select()
-        .eq('video_id', video.id)
-        .eq('user_id', user.id)
-        .eq('interaction_type', 'like')
-        .single();
-      
-      if (existingLike) {
+      // Don't allow viewing own videos
+      if (video.user_id === user.id) {
         toast({
-          title: "Você já curtiu este vídeo",
-          description: "Cada usuário pode curtir um vídeo apenas uma vez"
+          title: "Ação não permitida",
+          description: "Você não pode visualizar seus próprios vídeos",
+          variant: "destructive"
         });
         return;
       }
       
-      // Record the like interaction
-      await supabase
-        .from('video_interactions')
-        .insert({
-          video_id: video.id,
-          user_id: user.id,
-          interaction_type: 'like'
-        });
-      
-      // Update the video's like count
-      await supabase
-        .from('tiktok_videos')
-        .update({ likes: video.likes + 1 })
-        .eq('id', video.id);
-      
-      toast({
-        title: "Curtida registrada!",
-        description: "Obrigado pela interação"
-      });
-      
-      fetchVideos(); // Refresh videos
-    } catch (error: any) {
-      toast({
-        title: "Erro ao curtir vídeo",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  };
-
-  // View a video
-  const viewVideo = async (video: TikTokVideo) => {
-    if (!user) return;
-    
-    try {
-      // Check if user already viewed this video recently
-      const { data: existingView } = await supabase
-        .from('video_interactions')
-        .select()
-        .eq('video_id', video.id)
-        .eq('user_id', user.id)
-        .eq('interaction_type', 'view')
-        .single();
-      
-      if (existingView) {
-        toast({
-          title: "Visualização já registrada",
-          description: "Você já visualizou este vídeo recentemente"
-        });
-        return;
-      }
-      
-      // Record the view interaction
-      await supabase
-        .from('video_interactions')
-        .insert({
-          video_id: video.id,
-          user_id: user.id,
-          interaction_type: 'view'
-        });
-      
-      // Update the video's view count
-      await supabase
+      // Update view count
+      const { error } = await supabase
         .from('tiktok_videos')
         .update({ views: video.views + 1 })
         .eq('id', video.id);
       
+      if (error) {
+        throw error;
+      }
+      
+      // Update local state
+      const updatedRecentVideos = recentVideos.map(v => 
+        v.id === video.id ? { ...v, views: v.views + 1 } : v
+      );
+      setRecentVideos(updatedRecentVideos);
+      
+      const updatedLiked = topLiked.map(v => 
+        v.id === video.id ? { ...v, views: v.views + 1 } : v
+      );
+      setTopLiked(updatedLiked);
+      
+      const updatedViewed = topViewed.map(v => 
+        v.id === video.id ? { ...v, views: v.views + 1 } : v
+      );
+      setTopViewed(updatedViewed);
+      
       toast({
-        title: "Visualização registrada!",
-        description: "Obrigado pela interação"
+        title: "Visualização registrada",
+        description: `Você visualizou o vídeo de ${video.username || 'usuário'}`,
       });
       
-      fetchVideos(); // Refresh videos
     } catch (error: any) {
       toast({
         title: "Erro ao registrar visualização",
@@ -213,46 +232,128 @@ const LikesViews = () => {
     }
   };
 
-  // Fetch videos
-  const fetchVideos = async () => {
+  const incrementLike = async (video: TikTokVideo) => {
+    if (!user) return;
+    
     try {
-      // Fetch recent videos
-      const { data: recent } = await supabase
+      // Don't allow liking own videos
+      if (video.user_id === user.id) {
+        toast({
+          title: "Ação não permitida",
+          description: "Você não pode curtir seus próprios vídeos",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Update like count
+      const { error } = await supabase
         .from('tiktok_videos')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
+        .update({ likes: video.likes + 1 })
+        .eq('id', video.id);
       
-      if (recent) setRecentVideos(recent);
+      if (error) {
+        throw error;
+      }
       
-      // Fetch top 10 most liked videos
-      const { data: mostLiked } = await supabase
-        .from('tiktok_videos')
-        .select('*')
-        .order('likes', { ascending: false })
-        .limit(10);
+      // Update local state
+      const updatedRecentVideos = recentVideos.map(v => 
+        v.id === video.id ? { ...v, likes: v.likes + 1 } : v
+      );
+      setRecentVideos(updatedRecentVideos);
       
-      if (mostLiked) setTopLiked(mostLiked);
+      const updatedLiked = topLiked.map(v => 
+        v.id === video.id ? { ...v, likes: v.likes + 1 } : v
+      );
+      setTopLiked(updatedLiked);
       
-      // Fetch top 10 most viewed videos
-      const { data: mostViewed } = await supabase
-        .from('tiktok_videos')
-        .select('*')
-        .order('views', { ascending: false })
-        .limit(10);
+      const updatedViewed = topViewed.map(v => 
+        v.id === video.id ? { ...v, likes: v.likes + 1 } : v
+      );
+      setTopViewed(updatedViewed);
       
-      if (mostViewed) setTopViewed(mostViewed);
-    } catch (error) {
-      console.error("Error fetching videos:", error);
+      toast({
+        title: "Curtida registrada",
+        description: `Você curtiu o vídeo de ${video.username || 'usuário'}`,
+      });
+      
+    } catch (error: any) {
+      toast({
+        title: "Erro ao registrar curtida",
+        description: error.message,
+        variant: "destructive"
+      });
     }
   };
 
+  const renderVideoCard = (video: TikTokVideo, canInteract: boolean = true) => {
+    return (
+      <Card className="bg-tiktool-gray border-tiktool-gray/50 mb-4" key={video.id}>
+        <CardContent className="pt-6">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-shrink-0 w-full md:w-auto flex justify-center">
+              <div className="relative w-[325px] h-[570px] bg-tiktool-dark rounded-md flex items-center justify-center overflow-hidden">
+                <blockquote className="tiktok-embed" cite={`https://www.tiktok.com/@username/video/${video.video_id}`} data-video-id={video.video_id} style={{ maxWidth: '325px', minWidth: '325px' }}></blockquote>
+                {/* TikTok embeds script will be loaded once on component mount */}
+              </div>
+            </div>
+            
+            <div className="flex-grow space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold">{video.title}</h3>
+                <p className="text-sm text-muted-foreground">
+                  Por: {video.username || "Usuário"}
+                </p>
+              </div>
+              
+              <div className="flex gap-4">
+                <div className="bg-tiktool-dark p-3 rounded-md flex items-center gap-2">
+                  <Eye className="text-tiktool-teal h-5 w-5" />
+                  <span>{video.views} visualizações</span>
+                </div>
+                
+                <div className="bg-tiktool-dark p-3 rounded-md flex items-center gap-2">
+                  <ThumbsUp className="text-tiktool-pink h-5 w-5" />
+                  <span>{video.likes} curtidas</span>
+                </div>
+              </div>
+              
+              {canInteract && user && video.user_id !== user.id && (
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    onClick={() => incrementView(video)} 
+                    className="bg-tiktool-teal hover:bg-tiktool-teal/80"
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    Visualizar
+                  </Button>
+                  
+                  <Button 
+                    onClick={() => incrementLike(video)} 
+                    className="bg-tiktool-pink hover:bg-tiktool-pink/80"
+                  >
+                    <ThumbsUp className="mr-2 h-4 w-4" />
+                    Curtir
+                  </Button>
+                </div>
+              )}
+              
+              {user && video.user_id === user.id && (
+                <div className="bg-tiktool-dark p-3 rounded-md text-tiktool-teal text-sm">
+                  Este é seu vídeo
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Load TikTok embed script
   useEffect(() => {
-    fetchVideos();
-    
-    // Load TikTok embed script
     const script = document.createElement('script');
-    script.src = "https://www.tiktok.com/embed.js";
+    script.src = 'https://www.tiktok.com/embed.js';
     script.async = true;
     document.body.appendChild(script);
     
@@ -261,137 +362,139 @@ const LikesViews = () => {
     };
   }, []);
 
-  const renderVideoCard = (video: TikTokVideo) => {
-    return (
-      <Card key={video.id} className="bg-tiktool-gray border-tiktool-gray/50 mb-4">
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex justify-center">
-              <blockquote 
-                className="tiktok-embed bg-tiktool-dark p-2 rounded" 
-                cite={video.url} 
-                data-video-id={video.video_id} 
-                style={{ maxWidth: '325px', minWidth: '325px' }}
-              />
-            </div>
-            
-            <div className="flex flex-col justify-center gap-3">
-              <div className="flex items-center gap-2">
-                <ThumbsUp className="text-tiktool-pink" />
-                <span>{video.likes} curtidas</span>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Eye className="text-tiktool-teal" />
-                <span>{video.views} visualizações</span>
-              </div>
-              
-              <div className="flex gap-2 mt-4">
-                <Button 
-                  onClick={() => viewVideo(video)} 
-                  variant="outline"
-                  className="flex items-center gap-2"
-                >
-                  <Eye size={16} />
-                  Visualizar
-                </Button>
-                
-                <Button
-                  onClick={() => likeVideo(video)}
-                  className="bg-gradient-to-r from-tiktool-pink to-tiktool-teal hover:opacity-90 flex items-center gap-2"
-                >
-                  <ThumbsUp size={16} />
-                  Curtir
-                </Button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
   return (
     <DashboardLayout>
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold mb-2">Ganhe Likes e Visualizações</h1>
-          <p className="text-muted-foreground">Compartilhe seus vídeos e receba curtidas e visualizações da comunidade</p>
+          <p className="text-muted-foreground">Compartilhe seus vídeos e receba curtidas e visualizações da comunidade TikTool</p>
         </div>
         
         <Card className="bg-tiktool-gray border-tiktool-gray/50">
           <CardHeader>
-            <CardTitle>Compartilhar Vídeo</CardTitle>
-            <CardDescription>Cole o link do seu vídeo do TikTok para começar a receber interações</CardDescription>
+            <CardTitle>Compartilhe seu Vídeo do TikTok</CardTitle>
+            <CardDescription>Cole o link do seu vídeo para receber likes e visualizações</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col md:flex-row gap-2">
               <Input
                 placeholder="https://www.tiktok.com/@username/video/1234567890"
                 value={videoUrl}
                 onChange={(e) => setVideoUrl(e.target.value)}
-                className="bg-tiktool-dark"
+                className="bg-tiktool-dark border-tiktool-gray/50"
               />
               <Button 
                 onClick={submitVideo} 
-                disabled={loading || !videoUrl} 
+                disabled={!videoUrl.trim() || isLoading}
                 className="bg-gradient-to-r from-tiktool-pink to-tiktool-teal hover:opacity-90 md:w-auto w-full"
               >
-                {loading ? "Enviando..." : "Compartilhar Vídeo"}
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Adicionar Vídeo
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              * Todo sábado, os vídeos com mais curtidas e mais visualizações ganham 200 pontos extras cada.
+              Seu vídeo será exibido para outros usuários da plataforma. Você ganha pontos quando seu vídeo é visualizado/curtido.
             </p>
           </CardContent>
         </Card>
         
-        <Tabs defaultValue="recent" className="w-full">
-          <TabsList className="grid grid-cols-3 mb-8">
-            <TabsTrigger value="recent">Recentes</TabsTrigger>
-            <TabsTrigger value="topLiked">Mais Curtidos</TabsTrigger>
-            <TabsTrigger value="topViewed">Mais Visualizados</TabsTrigger>
+        <Tabs defaultValue="recents">
+          <TabsList className="bg-tiktool-dark">
+            <TabsTrigger value="recents">Mais Recentes</TabsTrigger>
+            <TabsTrigger value="top-views">Mais Visualizados</TabsTrigger>
+            <TabsTrigger value="top-likes">Mais Curtidos</TabsTrigger>
+            {userVideos.length > 0 && (
+              <TabsTrigger value="my-videos">Meus Vídeos</TabsTrigger>
+            )}
           </TabsList>
           
-          <TabsContent value="recent">
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Vídeos Recentes</h2>
-              {recentVideos.length > 0 ? (
-                recentVideos.map(renderVideoCard)
-              ) : (
-                <Card className="bg-tiktool-dark border-tiktool-gray/50 p-8 text-center">
-                  <p>Nenhum vídeo compartilhado ainda. Seja o primeiro!</p>
-                </Card>
-              )}
+          <TabsContent value="recents" className="mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Flame className="text-tiktool-pink" />
+              <h2 className="text-xl font-semibold">Vídeos Recentes</h2>
             </div>
+            
+            {recentVideos.length > 0 ? (
+              recentVideos.map(video => renderVideoCard(video))
+            ) : (
+              <Card className="bg-tiktool-dark border-tiktool-gray/50 p-8 text-center">
+                <p>Nenhum vídeo encontrado. Seja o primeiro a adicionar!</p>
+              </Card>
+            )}
           </TabsContent>
           
-          <TabsContent value="topLiked">
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Top 10 - Mais Curtidos</h2>
-              {topLiked.length > 0 ? (
-                topLiked.map(renderVideoCard)
-              ) : (
-                <Card className="bg-tiktool-dark border-tiktool-gray/50 p-8 text-center">
-                  <p>Nenhum vídeo curtido ainda.</p>
-                </Card>
-              )}
+          <TabsContent value="top-views" className="mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Eye className="text-tiktool-teal" />
+              <h2 className="text-xl font-semibold">Mais Visualizados</h2>
             </div>
+            
+            {topViewed.length > 0 ? (
+              topViewed.map(video => renderVideoCard(video))
+            ) : (
+              <Card className="bg-tiktool-dark border-tiktool-gray/50 p-8 text-center">
+                <p>Nenhum vídeo encontrado. Seja o primeiro a adicionar!</p>
+              </Card>
+            )}
           </TabsContent>
           
-          <TabsContent value="topViewed">
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Top 10 - Mais Visualizados</h2>
-              {topViewed.length > 0 ? (
-                topViewed.map(renderVideoCard)
-              ) : (
-                <Card className="bg-tiktool-dark border-tiktool-gray/50 p-8 text-center">
-                  <p>Nenhum vídeo visualizado ainda.</p>
-                </Card>
-              )}
+          <TabsContent value="top-likes" className="mt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <ThumbsUp className="text-tiktool-pink" />
+              <h2 className="text-xl font-semibold">Mais Curtidos</h2>
             </div>
+            
+            {topLiked.length > 0 ? (
+              topLiked.map(video => renderVideoCard(video))
+            ) : (
+              <Card className="bg-tiktool-dark border-tiktool-gray/50 p-8 text-center">
+                <p>Nenhum vídeo encontrado. Seja o primeiro a adicionar!</p>
+              </Card>
+            )}
           </TabsContent>
+          
+          {userVideos.length > 0 && (
+            <TabsContent value="my-videos" className="mt-6">
+              <div className="flex items-center gap-2 mb-4">
+                <Award className="text-tiktool-teal" />
+                <h2 className="text-xl font-semibold">Meus Vídeos</h2>
+              </div>
+              
+              {userVideos.map(video => renderVideoCard(video, false))}
+            </TabsContent>
+          )}
         </Tabs>
+        
+        <Card className="bg-gradient-to-r from-tiktool-pink/10 to-tiktool-teal/10 border border-tiktool-gray/30">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3 mb-3">
+              <Award className="text-yellow-500 h-6 w-6" />
+              <h3 className="text-lg font-semibold">Premiação Semanal</h3>
+            </div>
+            
+            <p className="mb-2">Todo sábado, os vídeos com maiores resultados ganham:</p>
+            
+            <ul className="space-y-2">
+              <li className="flex items-center gap-2">
+                <div className="bg-tiktool-dark rounded-full p-1">
+                  <ThumbsUp className="h-4 w-4 text-tiktool-pink" />
+                </div>
+                <span>Vídeo mais curtido: <span className="font-bold text-tiktool-pink">+200 pontos</span></span>
+              </li>
+              
+              <li className="flex items-center gap-2">
+                <div className="bg-tiktool-dark rounded-full p-1">
+                  <Eye className="h-4 w-4 text-tiktool-teal" />
+                </div>
+                <span>Vídeo mais visualizado: <span className="font-bold text-tiktool-teal">+200 pontos</span></span>
+              </li>
+            </ul>
+            
+            <p className="text-xs text-muted-foreground mt-3">
+              Os pontos são automaticamente creditados na sua conta e podem ser usados na ferramenta "Conecte e Ganhe".
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );
