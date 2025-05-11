@@ -2,7 +2,7 @@
 import DashboardLayout from "@/components/DashboardLayout";
 import FeatureCard from "@/components/FeatureCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Hash, TrendingUp, User, Video } from "lucide-react";
+import { Hash, TrendingUp, User, Video, ThumbsUp, Award } from "lucide-react";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -49,6 +49,22 @@ const Dashboard = () => {
             icon={<TrendingUp className="text-white" />}
             to="/profile-analysis"
             gradient="mixed"
+          />
+          
+          <FeatureCard 
+            title="Ganhe Likes e Views" 
+            description="Compartilhe seus vídeos e receba curtidas e visualizações da comunidade."
+            icon={<ThumbsUp className="text-tiktool-pink" />}
+            to="/likes-views"
+            gradient="pink"
+          />
+          
+          <FeatureCard 
+            title="Desafio Diário" 
+            description="Complete desafios diários para ganhar pontos e conquistar badges."
+            icon={<Award className="text-tiktool-teal" />}
+            to="/daily-challenge"
+            gradient="teal"
           />
         </div>
         

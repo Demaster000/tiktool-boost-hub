@@ -1,10 +1,11 @@
 
 import React, { ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Menu, X } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItemProps {
   to: string;
@@ -38,8 +39,15 @@ interface DashboardLayoutProps {
 
 const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const { signOut } = useAuth();
+  
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
   
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
@@ -95,10 +103,20 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <NavItem to="/profile-analysis" currentPath={location.pathname}>
               Análise de Perfil
             </NavItem>
+            <NavItem to="/likes-views" currentPath={location.pathname}>
+              Ganhe Likes e Views
+            </NavItem>
+            <NavItem to="/daily-challenge" currentPath={location.pathname}>
+              Desafio Diário
+            </NavItem>
           </div>
           
           <div className="pt-6 mt-6 border-t border-tiktool-gray/30">
-            <Button variant="ghost" className="w-full justify-start text-left text-muted-foreground">
+            <Button 
+              variant="ghost" 
+              className="w-full justify-start text-left text-muted-foreground"
+              onClick={handleSignOut}
+            >
               Sair
             </Button>
           </div>

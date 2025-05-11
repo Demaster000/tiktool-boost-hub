@@ -14,6 +14,8 @@ import VideoIdeas from "./pages/VideoIdeas";
 import ProfileAnalysis from "./pages/ProfileAnalysis";
 import NotFound from "./pages/NotFound";
 import HashtagGenerator from "./pages/HashtagGenerator";
+import LikesViews from "./pages/LikesViews";
+import DailyChallenge from "./pages/DailyChallenge";
 import PrivateRoute from "./components/PrivateRoute";
 
 const queryClient = new QueryClient();
@@ -34,6 +36,8 @@ const App = () => (
             <Route path="/video-ideas" element={<PrivateRoute><VideoIdeas /></PrivateRoute>} />
             <Route path="/profile-analysis" element={<PrivateRoute><ProfileAnalysis /></PrivateRoute>} />
             <Route path="/hashtag-generator" element={<PrivateRoute><HashtagGenerator /></PrivateRoute>} />
+            <Route path="/likes-views" element={<PrivateRoute><LikesViews /></PrivateRoute>} />
+            <Route path="/daily-challenge" element={<PrivateRoute><DailyChallenge /></PrivateRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
