@@ -60,19 +60,46 @@ const DailyChallenge = () => {
     if (!user) return;
     
     try {
-      // Get today's challenges
-      const { data: challenges, error: challengeError } = await supabase
-        .from('challenges')
-        .select('*')
-        .eq('active', true)
-        .limit(5);
-
-      if (challengeError) {
-        console.error("Error fetching challenges:", challengeError);
-        return;
-      }
-      
-      if (!challenges) return;
+      // Get today's challenges - we'll use our fixed challenges instead
+      // Define fixed challenges
+      const fixedChallenges = [
+        {
+          id: "1",
+          title: "Siga 30 pessoas",
+          description: "Siga 30 pessoas usando a ferramenta 'Conecte e Ganhe'",
+          type: "follow_users",
+          goal: 30,
+          points: 20,
+          active: true
+        },
+        {
+          id: "2",
+          title: "Visualize e curta 5 vídeos",
+          description: "Visualize e curta 5 vídeos na ferramenta 'Ganhe Likes e Visualizações'",
+          type: "view_like_videos",
+          goal: 5,
+          points: 10,
+          active: true
+        },
+        {
+          id: "3",
+          title: "Compartilhe um vídeo",
+          description: "Compartilhe um vídeo na ferramenta 'Ganhe Likes e Visualizações'",
+          type: "share_video",
+          goal: 1,
+          points: 10,
+          active: true
+        },
+        {
+          id: "4",
+          title: "Analise seu perfil",
+          description: "Faça uma análise do seu perfil na ferramenta 'Análise de Perfil'",
+          type: "analyze_profile",
+          goal: 1,
+          points: 10,
+          active: true
+        }
+      ];
       
       // Get user progress for these challenges
       const { data: userProgress, error: progressError } = await supabase
@@ -86,7 +113,7 @@ const DailyChallenge = () => {
       }
         
       // Merge progress with challenges
-      const mergedChallenges = challenges.map(challenge => {
+      const mergedChallenges = fixedChallenges.map(challenge => {
         const progress = userProgress?.find(p => p.challenge_id === challenge.id);
         return {
           ...challenge,

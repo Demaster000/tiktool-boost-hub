@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -40,11 +39,6 @@ const LikesViews = () => {
 
   const fetchVideos = async () => {
     try {
-      // Create the tiktok_videos table if it doesn't exist yet
-      await supabase.rpc('create_tiktok_videos_table_if_not_exists').catch(e => {
-        console.error("Error creating table:", e);
-      });
-
       // Fetch recent videos
       const { data: recent } = await supabase
         .from('tiktok_videos')

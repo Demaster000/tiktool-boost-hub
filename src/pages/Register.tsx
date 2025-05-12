@@ -1,23 +1,39 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { Loader2 } from "lucide-react";
 
 const Register = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const navigate = useNavigate();
   const { signUp, user } = useAuth();
 
-  // If user is already logged in, redirect to dashboard
-  if (user) {
-    navigate("/dashboard");
-    return null;
+  // Check if user is already logged in and redirect if needed
+  useEffect(() => {
+    if (user) {
+      setIsRedirecting(true);
+      navigate("/dashboard");
+    }
+  }, [user, navigate]);
+
+  // If user is already logged in, show redirecting message
+  if (isRedirecting) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-tiktool-dark">
+        <div className="w-full max-w-md text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-lg">Você já está logado. Redirecionando para o painel...</p>
+        </div>
+      </div>
+    );
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

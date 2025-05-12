@@ -8,6 +8,8 @@ type UserStats = {
   followers_gained: number;
   ideas_generated: number;
   analyses_completed: number;
+  videos_shared: number;
+  daily_challenges_completed: number;
 }
 
 export const useUserStats = () => {
@@ -16,7 +18,9 @@ export const useUserStats = () => {
     points: 0,
     followers_gained: 0,
     ideas_generated: 0,
-    analyses_completed: 0
+    analyses_completed: 0,
+    videos_shared: 0,
+    daily_challenges_completed: 0
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,14 +35,19 @@ export const useUserStats = () => {
       try {
         const { data, error } = await supabase
           .from('user_statistics')
-          .select('points, followers_gained, ideas_generated, analyses_completed')
+          .select('points, followers_gained, ideas_generated, analyses_completed, videos_shared, daily_challenges_completed')
           .eq('user_id', user.id)
           .single();
 
         if (error) throw error;
 
         if (data) {
-          setStats(data);
+          // Set default values for new columns if they don't exist yet
+          setStats({
+            ...data,
+            videos_shared: data.videos_shared || 0,
+            daily_challenges_completed: data.daily_challenges_completed || 0
+          });
         }
       } catch (err: any) {
         console.error('Error fetching user stats:', err);

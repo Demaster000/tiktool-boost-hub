@@ -100,6 +100,18 @@ const Dashboard = () => {
                     {loading ? '...' : stats?.analyses_completed || 0}
                   </p>
                 </div>
+                <div className="bg-tiktool-dark p-4 rounded-md">
+                  <p className="text-sm text-muted-foreground mb-1">Vídeos Compartilhados</p>
+                  <p className="text-2xl font-bold">
+                    {loading ? '...' : stats?.videos_shared || 0}
+                  </p>
+                </div>
+                <div className="bg-tiktool-dark p-4 rounded-md">
+                  <p className="text-sm text-muted-foreground mb-1">Desafios Completos</p>
+                  <p className="text-2xl font-bold">
+                    {loading ? '...' : stats?.daily_challenges_completed || 0}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

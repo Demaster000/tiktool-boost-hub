@@ -175,6 +175,41 @@ export type ExtendedDatabase = Database & {
           created_at?: string;
         };
       };
+      user_statistics: {
+        Row: {
+          user_id: string;
+          points: number;
+          followers_gained: number;
+          ideas_generated: number;
+          analyses_completed: number;
+          videos_shared: number;
+          daily_challenges_completed: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          points?: number;
+          followers_gained?: number;
+          ideas_generated?: number;
+          analyses_completed?: number;
+          videos_shared?: number;
+          daily_challenges_completed?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          points?: number;
+          followers_gained?: number;
+          ideas_generated?: number;
+          analyses_completed?: number;
+          videos_shared?: number;
+          daily_challenges_completed?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     } & Database['public']['Tables'];
   };
 };

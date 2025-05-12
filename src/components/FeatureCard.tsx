@@ -1,49 +1,43 @@
 
-import { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { cva } from "class-variance-authority";
 
 interface FeatureCardProps {
   title: string;
   description: string;
-  icon: ReactNode;
+  icon: React.ReactNode;
   to: string;
-  gradient?: "pink" | "teal" | "mixed";
+  gradient: "pink" | "teal" | "mixed";
 }
 
-const FeatureCard = ({ title, description, icon, to, gradient = "pink" }: FeatureCardProps) => {
-  let gradientClass = "from-tiktool-pink to-tiktool-pink/50";
-  
-  if (gradient === "teal") {
-    gradientClass = "from-tiktool-teal to-tiktool-teal/50";
-  } else if (gradient === "mixed") {
-    gradientClass = "from-tiktool-pink to-tiktool-teal";
-  }
-  
+const gradientVariants = cva("", {
+  variants: {
+    gradient: {
+      pink: "bg-gradient-to-br from-tiktool-pink/20 to-tiktool-pink/5 hover:from-tiktool-pink/30 hover:to-tiktool-pink/10",
+      teal: "bg-gradient-to-br from-tiktool-teal/20 to-tiktool-teal/5 hover:from-tiktool-teal/30 hover:to-tiktool-teal/10",
+      mixed: "bg-gradient-to-br from-tiktool-pink/20 to-tiktool-teal/20 hover:from-tiktool-pink/30 hover:to-tiktool-teal/30",
+    },
+  },
+  defaultVariants: {
+    gradient: "mixed",
+  },
+});
+
+const FeatureCard = ({ title, description, icon, to, gradient }: FeatureCardProps) => {
   return (
-    <Card className="bg-tiktool-gray border-tiktool-gray/50 overflow-hidden">
-      <div className={`h-2 bg-gradient-to-r ${gradientClass}`} />
-      <CardHeader>
-        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-tiktool-gray/50 mb-4">
-          {icon}
-        </div>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">
-          {description}
-        </p>
-      </CardContent>
-      <CardFooter>
-        <Link to={to} className="w-full">
-          <Button className="w-full bg-gradient-to-r from-tiktool-pink to-tiktool-teal hover:opacity-90">
-            Acessar
-          </Button>
-        </Link>
-      </CardFooter>
-    </Card>
+    <Link to={to}>
+      <Card className={`border-tiktool-gray/50 h-full transition-all duration-300 ${gradientVariants({ gradient })}`}>
+        <CardContent className="pt-6 flex flex-col h-full">
+          <div className="w-12 h-12 rounded-full bg-tiktool-dark flex items-center justify-center mb-4">
+            {icon}
+          </div>
+          
+          <h3 className="text-xl font-bold mb-2">{title}</h3>
+          <p className="text-muted-foreground">{description}</p>
+        </CardContent>
+      </Card>
+    </Link>
   );
 };
 
