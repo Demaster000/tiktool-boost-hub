@@ -52,7 +52,7 @@ const DailyChallenge = () => {
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   
   const { user } = useAuth();
-  const { stats, updateStat } = useUserStats();
+  const { stats, updateStat, incrementStat } = useUserStats();
 
   // Fetch daily challenges
   const fetchChallenges = async () => {
