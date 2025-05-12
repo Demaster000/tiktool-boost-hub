@@ -30,7 +30,7 @@ const FeatureCard = ({ title, description, icon, to, gradient, recommended }: Fe
     <Link to={to}>
       <Card className={`border-tiktool-gray/50 h-full transition-all duration-300 ${gradientVariants({ gradient })} relative`}>
         {recommended && (
-          <div className="absolute -top-2 -right-2 bg-tiktool-pink text-white text-xs font-bold py-1 px-3 rounded-full transform rotate-0">
+          <div className="absolute -top-3 -right-3 bg-tiktool-pink text-white text-xs font-bold py-1 px-3 rounded-full">
             RECOMENDADO
           </div>
         )}

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -29,7 +30,7 @@ const LikesViews = () => {
   const [topViewed, setTopViewed] = useState<TikTokVideo[]>([]);
   const [userVideos, setUserVideos] = useState<TikTokVideo[]>([]);
   const { user } = useAuth();
-  const { updateStat } = useUserStats();
+  const { updateStat, incrementStat } = useUserStats();
 
   useEffect(() => {
     if (user) {
@@ -169,10 +170,9 @@ const LikesViews = () => {
       });
       
       setVideoUrl("");
-      fetchVideos();
+      await fetchVideos();
       
       // Update user statistics
-      const { stats, incrementStat } = useUserStats();
       await incrementStat('videos_shared', 1);
       await incrementStat('points', 5);
       

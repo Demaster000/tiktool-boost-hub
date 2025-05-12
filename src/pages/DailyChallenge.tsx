@@ -9,6 +9,7 @@ import { toast } from "@/hooks/use-toast";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAuth } from "@/contexts/AuthContext";
 import { Check, Trophy, Award, Star } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 interface Challenge {
   id: string;
@@ -53,6 +54,7 @@ const DailyChallenge = () => {
   
   const { user } = useAuth();
   const { stats, updateStat, incrementStat } = useUserStats();
+  const navigate = useNavigate();
 
   // Fetch daily challenges
   const fetchChallenges = async () => {
@@ -232,14 +234,14 @@ const DailyChallenge = () => {
   const redirectToTool = (challengeType: string) => {
     switch(challengeType) {
       case "follow_users":
-        window.location.href = "/connect-earn";
+        navigate("/connect-earn");
         break;
       case "view_like_videos":
       case "share_video":
-        window.location.href = "/likes-views";
+        navigate("/likes-views");
         break;
       case "analyze_profile":
-        window.location.href = "/profile-analysis";
+        navigate("/profile-analysis");
         break;
       default:
         // Stay on current page if no matching tool
@@ -404,7 +406,7 @@ const DailyChallenge = () => {
       // Redirect to appropriate tool after a short delay
       setTimeout(() => {
         redirectToTool(challenge.type);
-      }, 1500);
+      }, 1000);
       
     } catch (error: any) {
       toast({
