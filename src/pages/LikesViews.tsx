@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -29,6 +28,7 @@ const LikesViews = () => {
   const [topLiked, setTopLiked] = useState<TikTokVideo[]>([]);
   const [topViewed, setTopViewed] = useState<TikTokVideo[]>([]);
   const [userVideos, setUserVideos] = useState<TikTokVideo[]>([]);
+  const [activeTab, setActiveTab] = useState("recents");
   const { user } = useAuth();
   const { updateStat, incrementStat } = useUserStats();
 
@@ -150,7 +150,7 @@ const LikesViews = () => {
       }
       
       // Add video to database
-      const { error } = await supabase
+      const { data: newVideo, error } = await supabase
         .from('tiktok_videos')
         .insert({
           user_id: user.id,
@@ -158,10 +158,23 @@ const LikesViews = () => {
           title: `Vídeo de ${user.email?.split('@')[0] || 'usuário'}`,
           views: 0,
           likes: 0
-        });
+        })
+        .select('*')
+        .single();
       
       if (error) {
         throw error;
+      }
+      
+      // Add the new video to the recent videos list and make sure we only keep 10
+      if (newVideo) {
+        const updatedVideo = {
+          ...newVideo,
+          username: user.email?.split('@')[0] || 'usuário'
+        };
+        
+        setRecentVideos(prevVideos => [updatedVideo, ...prevVideos.slice(0, 9)]);
+        setUserVideos(prevVideos => [updatedVideo, ...prevVideos]);
       }
       
       toast({
@@ -170,7 +183,10 @@ const LikesViews = () => {
       });
       
       setVideoUrl("");
-      await fetchVideos();
+      await fetchVideos(); // Refresh all video lists
+      
+      // Switch to the recents tab to show the newly added video
+      setActiveTab("recents");
       
       // Update user statistics
       await incrementStat('videos_shared', 1);
@@ -417,7 +433,7 @@ const LikesViews = () => {
           </CardContent>
         </Card>
         
-        <Tabs defaultValue="recents">
+        <Tabs defaultValue="recents" value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="bg-tiktool-dark">
             <TabsTrigger value="recents">Mais Recentes</TabsTrigger>
             <TabsTrigger value="top-views">Mais Visualizados</TabsTrigger>

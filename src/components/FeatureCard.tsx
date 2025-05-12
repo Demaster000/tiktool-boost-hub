@@ -9,7 +9,6 @@ interface FeatureCardProps {
   icon: React.ReactNode;
   to: string;
   gradient: "pink" | "teal" | "mixed";
-  recommended?: boolean;
 }
 
 const gradientVariants = cva("", {
@@ -25,15 +24,10 @@ const gradientVariants = cva("", {
   },
 });
 
-const FeatureCard = ({ title, description, icon, to, gradient, recommended }: FeatureCardProps) => {
+const FeatureCard = ({ title, description, icon, to, gradient }: FeatureCardProps) => {
   return (
     <Link to={to}>
-      <Card className={`border-tiktool-gray/50 h-full transition-all duration-300 ${gradientVariants({ gradient })} relative`}>
-        {recommended && (
-          <div className="absolute -top-3 -right-3 bg-tiktool-pink text-white text-xs font-bold py-1 px-3 rounded-full">
-            RECOMENDADO
-          </div>
-        )}
+      <Card className={`border-tiktool-gray/50 h-full transition-all duration-300 ${gradientVariants({ gradient })}`}>
         <CardContent className="pt-6 flex flex-col h-full">
           <div className="w-12 h-12 rounded-full bg-tiktool-dark flex items-center justify-center mb-4">
             {icon}
