@@ -328,8 +328,14 @@ const LikesViews = () => {
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-shrink-0 w-full md:w-auto flex justify-center">
               <div className="relative w-[325px] h-[570px] bg-tiktool-dark rounded-md flex items-center justify-center overflow-hidden">
-                <blockquote className="tiktok-embed" cite={embedUrl} data-video-id={video.video_id} style={{ maxWidth: '325px', minWidth: '325px' }}></blockquote>
-                {/* TikTok embeds script will be loaded once on component mount */}
+                <blockquote 
+                  className="tiktok-embed" 
+                  cite={embedUrl} 
+                  data-video-id={video.video_id} 
+                  style={{ maxWidth: '325px', minWidth: '325px' }}
+                >
+                  <section></section>
+                </blockquote>
               </div>
             </div>
             
@@ -387,15 +393,41 @@ const LikesViews = () => {
 
   // Load TikTok embed script
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = 'https://www.tiktok.com/embed.js';
-    script.async = true;
-    document.body.appendChild(script);
-    
-    return () => {
-      document.body.removeChild(script);
+    // Function to load the TikTok embed script
+    const loadTikTokScript = () => {
+      // Remove any existing TikTok embed script to prevent duplicates
+      const existingScript = document.querySelector('script[src="https://www.tiktok.com/embed.js"]');
+      if (existingScript) {
+        document.body.removeChild(existingScript);
+      }
+
+      // Create and add the new script
+      const script = document.createElement('script');
+      script.src = 'https://www.tiktok.com/embed.js';
+      script.async = true;
+      document.body.appendChild(script);
     };
-  }, []);
+
+    // Load script initially
+    loadTikTokScript();
+
+    // Set up a periodic refresh of the script
+    // This helps with rendering embeds when navigating between tabs
+    const refreshInterval = setInterval(() => {
+      if (document.querySelectorAll('.tiktok-embed').length > 0) {
+        loadTikTokScript();
+      }
+    }, 2000);
+
+    return () => {
+      clearInterval(refreshInterval);
+      // Cleanup on component unmount
+      const script = document.querySelector('script[src="https://www.tiktok.com/embed.js"]');
+      if (script) {
+        document.body.removeChild(script);
+      }
+    };
+  }, [activeTab]);
 
   return (
     <DashboardLayout>

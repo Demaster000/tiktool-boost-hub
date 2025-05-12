@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +13,12 @@ const Login = () => {
   const navigate = useNavigate();
   const { signIn, user } = useAuth();
 
-  // If user is already logged in, redirect to dashboard
-  if (user) {
-    navigate("/dashboard");
-    return null;
-  }
+  // Use useEffect to handle redirection when user state changes
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard");
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,6 +33,11 @@ const Login = () => {
       setIsLoading(false);
     }
   };
+
+  // If still loading, show nothing to prevent flash
+  if (user) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-tiktool-dark">
