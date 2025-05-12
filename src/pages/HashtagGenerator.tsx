@@ -7,11 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useHashtags } from "@/hooks/useHashtags";
 import { useUserStats } from "@/hooks/useUserStats";
+import { Copy } from "lucide-react";
 
 const HashtagGenerator = () => {
   const [selectedNiche, setSelectedNiche] = useState("");
+  const [copied, setCopied] = useState(false);
   const { hashtags, loading: hashtagsLoading, getHashtagsByNiche } = useHashtags();
-  const { stats, updateStat } = useUserStats();
+  const { stats, incrementStat } = useUserStats();
   const { toast } = useToast();
 
   const handleGenerateHashtags = async () => {
@@ -27,14 +29,27 @@ const HashtagGenerator = () => {
     await getHashtagsByNiche(selectedNiche);
     
     // Update user stats for hashtags generated
-    if (stats) {
-      await updateStat('ideas_generated', stats.ideas_generated + 1);
-    }
+    await incrementStat('ideas_generated', 1);
     
     toast({
       title: "Hashtags geradas!",
       description: "Experimente usar estas hashtags em seus vídeos.",
     });
+  };
+
+  const handleCopyHashtags = () => {
+    if (hashtags.length === 0) return;
+    
+    const hashtagsText = hashtags.join(' ');
+    navigator.clipboard.writeText(hashtagsText);
+    
+    setCopied(true);
+    toast({
+      title: "Hashtags copiadas!",
+      description: "As hashtags foram copiadas para a área de transferência.",
+    });
+    
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -83,7 +98,18 @@ const HashtagGenerator = () => {
             {hashtags.length > 0 && (
               <Card className="bg-tiktool-dark border-tiktool-gray/50">
                 <CardHeader>
-                  <CardTitle className="text-lg">Suas hashtags:</CardTitle>
+                  <div className="flex justify-between items-center">
+                    <CardTitle className="text-lg">Suas hashtags:</CardTitle>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleCopyHashtags}
+                      className={`${copied ? 'bg-tiktool-teal/20 hover:bg-tiktool-teal/30' : 'hover:bg-tiktool-dark/50'}`}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      {copied ? "Copiado!" : "Copiar"}
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">

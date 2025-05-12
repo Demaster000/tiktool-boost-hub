@@ -42,9 +42,11 @@ export const useUserStats = () => {
         if (error) throw error;
 
         if (data) {
-          // Set default values for new columns if they don't exist yet
           setStats({
-            ...data,
+            points: data.points || 0,
+            followers_gained: data.followers_gained || 0,
+            ideas_generated: data.ideas_generated || 0,
+            analyses_completed: data.analyses_completed || 0,
             videos_shared: data.videos_shared || 0,
             daily_challenges_completed: data.daily_challenges_completed || 0
           });
@@ -75,8 +77,33 @@ export const useUserStats = () => {
     } catch (err: any) {
       console.error(`Error updating ${field}:`, err);
       setError(err.message);
+      return false;
+    }
+    return true;
+  };
+
+  const incrementStat = async (field: keyof UserStats, amount: number = 1) => {
+    if (!user) return false;
+    
+    try {
+      const currentValue = stats[field];
+      const newValue = currentValue + amount;
+      
+      const { error } = await supabase
+        .from('user_statistics')
+        .update({ [field]: newValue })
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      setStats(prev => ({ ...prev, [field]: newValue }));
+      return true;
+    } catch (err: any) {
+      console.error(`Error incrementing ${field}:`, err);
+      setError(err.message);
+      return false;
     }
   };
 
-  return { stats, loading, error, updateStat };
+  return { stats, loading, error, updateStat, incrementStat };
 };

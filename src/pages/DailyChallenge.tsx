@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -229,6 +228,25 @@ const DailyChallenge = () => {
     }
   };
 
+  // Function to redirect to the appropriate tool based on challenge type
+  const redirectToTool = (challengeType: string) => {
+    switch(challengeType) {
+      case "follow_users":
+        window.location.href = "/connect-earn";
+        break;
+      case "view_like_videos":
+      case "share_video":
+        window.location.href = "/likes-views";
+        break;
+      case "analyze_profile":
+        window.location.href = "/profile-analysis";
+        break;
+      default:
+        // Stay on current page if no matching tool
+        break;
+    }
+  };
+
   // Complete a challenge step
   const completeStep = async (challenge: Challenge) => {
     if (!user || dailyLimitReached) return;
@@ -347,6 +365,7 @@ const DailyChallenge = () => {
             const totalPoints = pointsToAdd + (challenge.completed ? 0 : bonusPoints);
             
             await updateStat('points', stats.points + totalPoints);
+            await incrementStat('daily_challenges_completed', 1);
           }
           
           // Update local state
@@ -381,6 +400,12 @@ const DailyChallenge = () => {
           ? `Você ganhou ${challenge.points} pontos!` 
           : `Progresso: ${newProgress}/${challenge.goal}`,
       });
+      
+      // Redirect to appropriate tool after a short delay
+      setTimeout(() => {
+        redirectToTool(challenge.type);
+      }, 1500);
+      
     } catch (error: any) {
       toast({
         title: "Erro ao completar desafio",

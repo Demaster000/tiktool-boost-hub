@@ -104,20 +104,32 @@ const LikesViews = () => {
     setIsLoading(true);
     
     try {
-      // Extract video ID and validate TikTok URL
-      const regex = /tiktok\.com\/@[\w\.]+\/video\/(\d+)/;
-      const match = videoUrl.match(regex);
+      // Extract video ID and validate TikTok URL - updated to accept both formats
+      let videoId;
       
-      if (!match || !match[1]) {
+      // Web format: tiktok.com/@username/video/1234567890
+      const webRegex = /tiktok\.com\/@[\w\.]+\/video\/(\d+)/;
+      const webMatch = videoUrl.match(webRegex);
+      
+      // Mobile format: vm.tiktok.com/ABCDEF/
+      const mobileRegex = /vm\.tiktok\.com\/[\w\-]+\//;
+      const isMobileFormat = mobileRegex.test(videoUrl);
+      
+      if (webMatch && webMatch[1]) {
+        videoId = webMatch[1];
+      } else if (isMobileFormat) {
+        // For mobile links, we'll use the entire URL as an identifier
+        // since we can't easily extract the video ID
+        videoId = videoUrl.replace(/https?:\/\//, '').trim();
+      } else {
         toast({
           title: "URL inválida",
-          description: "Por favor insira um link válido do TikTok (ex: https://www.tiktok.com/@username/video/1234567890)",
+          description: "Por favor insira um link válido do TikTok (ex: https://www.tiktok.com/@username/video/1234567890 ou https://vm.tiktok.com/ABCDEF/)",
           variant: "destructive"
         });
+        setIsLoading(false);
         return;
       }
-      
-      const videoId = match[1];
       
       // Check if video already exists
       const { data: existingVideo } = await supabase
@@ -132,6 +144,7 @@ const LikesViews = () => {
           description: "Este vídeo já foi adicionado ao sistema",
           variant: "destructive"
         });
+        setIsLoading(false);
         return;
       }
       
@@ -158,8 +171,10 @@ const LikesViews = () => {
       setVideoUrl("");
       fetchVideos();
       
-      // Add points to user
-      await updateStat('points', 5);
+      // Update user statistics
+      const { stats, incrementStat } = useUserStats();
+      await incrementStat('videos_shared', 1);
+      await incrementStat('points', 5);
       
     } catch (error: any) {
       toast({
@@ -281,13 +296,23 @@ const LikesViews = () => {
   };
 
   const renderVideoCard = (video: TikTokVideo, canInteract: boolean = true) => {
+    // Create the embed URL based on the video_id format
+    let embedUrl;
+    if (video.video_id.includes('vm.tiktok.com')) {
+      // If it's a mobile format URL
+      embedUrl = `https://${video.video_id}`;
+    } else {
+      // If it's a regular video ID
+      embedUrl = `https://www.tiktok.com/@username/video/${video.video_id}`;
+    }
+
     return (
       <Card className="bg-tiktool-gray border-tiktool-gray/50 mb-4" key={video.id}>
         <CardContent className="pt-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-shrink-0 w-full md:w-auto flex justify-center">
               <div className="relative w-[325px] h-[570px] bg-tiktool-dark rounded-md flex items-center justify-center overflow-hidden">
-                <blockquote className="tiktok-embed" cite={`https://www.tiktok.com/@username/video/${video.video_id}`} data-video-id={video.video_id} style={{ maxWidth: '325px', minWidth: '325px' }}></blockquote>
+                <blockquote className="tiktok-embed" cite={embedUrl} data-video-id={video.video_id} style={{ maxWidth: '325px', minWidth: '325px' }}></blockquote>
                 {/* TikTok embeds script will be loaded once on component mount */}
               </div>
             </div>
