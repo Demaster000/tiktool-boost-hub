@@ -16,6 +16,7 @@ import ConnectEarn from "@/pages/ConnectEarn";
 import LikesViews from "@/pages/LikesViews";
 import NotFound from "@/pages/NotFound";
 import MyProfile from "@/pages/MyProfile";
+import Admin from "@/pages/Admin";
 
 import { Toaster } from "@/components/ui/toaster";
 
@@ -92,6 +93,14 @@ function App() {
               element={
                 <PrivateRoute>
                   <MyProfile />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <PrivateRoute>
+                  <Admin />
                 </PrivateRoute>
               }
             />
