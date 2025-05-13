@@ -131,7 +131,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
-      await supabase.auth.signOut();
+      // Clear local storage of any auth tokens
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase.auth')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // Perform the actual sign out
+      const { error } = await supabase.auth.signOut({ scope: 'global' });
+      
+      if (error) throw error;
+      
+      // Reset state
+      setUser(null);
+      setSession(null);
+      setIsPremium(false);
+      
       toast({
         title: "Logout realizado com sucesso",
       });
@@ -141,6 +157,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         title: "Erro ao fazer logout",
         description: error.message,
       });
+      throw error;
     }
   };
 

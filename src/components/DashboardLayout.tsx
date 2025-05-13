@@ -45,8 +45,13 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const { signOut } = useAuth();
   
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+      // Force redirect to login page after logout
+      window.location.href = '/login';
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
   };
   
   return (

@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@11.18.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
@@ -121,15 +120,16 @@ serve(async (req) => {
             .eq("user_id", userId)
             .single();
           
-          if (statsError) {
+          if (statsError && statsError.code !== 'PGRST116') { // PGRST116 is "no rows returned" which is fine, we'll create a new record
             console.error(`❌ Error fetching stats for user ${userId}:`, statsError.message);
             throw statsError;
           }
           
+          const currentPoints = stats?.points || 0;
+          const newPoints = currentPoints + pointsToAdd;
+          
           if (stats) {
-            const currentPoints = stats.points || 0;
-            const newPoints = currentPoints + pointsToAdd;
-            
+            // Update existing record
             const { error: updateError } = await supabaseAdmin
               .from("user_statistics")
               .update({ points: newPoints })
@@ -142,7 +142,7 @@ serve(async (req) => {
 
             console.log(`✅ User ${userId} purchased ${pointsToAdd} points (${currentPoints} → ${newPoints})`);
           } else {
-            // If for some reason the user doesn't have a stats record, create one
+            // Create new record
             const { error: insertError } = await supabaseAdmin
               .from("user_statistics")
               .insert({
