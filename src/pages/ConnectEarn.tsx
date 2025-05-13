@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -128,12 +127,14 @@ const ConnectEarn = () => {
     setIsProfileActive(true);
     localStorage.setItem("activeProfile", profileUsername);
     
-    // Add the new profile to available profiles (simulate this operation)
+    // Add the new profile to available profiles
     const newProfile = {
       id: Date.now(), // Use timestamp as unique ID
       username: profileUsername,
       followers: 0
     };
+    
+    // Add to beginning of array for immediate visibility
     setAvailableProfiles(prev => [newProfile, ...prev]);
     
     setSuccessMessage({

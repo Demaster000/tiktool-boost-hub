@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Menu, X } from "lucide-react";
+import { Menu, X, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItemProps {
@@ -86,6 +86,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
             <h3 className="text-xs uppercase text-muted-foreground font-medium mb-2">Painel</h3>
             <NavItem to="/dashboard" currentPath={location.pathname}>
               Dashboard
+            </NavItem>
+            <NavItem to="/my-profile" currentPath={location.pathname}>
+              Meu Perfil
             </NavItem>
           </div>
           

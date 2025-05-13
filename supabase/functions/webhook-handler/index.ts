@@ -61,40 +61,106 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
           
-          // Add 200 bonus points for new subscribers
-          const { data: stats } = await supabaseAdmin
+          // Add 200 bonus points for new subscribers - ENSURE THIS WORKS CORRECTLY
+          const { data: stats, error: statsError } = await supabaseAdmin
             .from("user_statistics")
             .select("points")
             .eq("user_id", userId)
             .single();
           
-          if (stats) {
-            await supabaseAdmin
-              .from("user_statistics")
-              .update({ points: stats.points + 200 })
-              .eq("user_id", userId);
+          if (statsError) {
+            console.error(`❌ Error fetching stats for user ${userId}:`, statsError.message);
+            throw statsError;
           }
           
-          console.log(`✅ User ${userId} successfully subscribed and received 200 bonus points`);
+          if (stats) {
+            const currentPoints = stats.points || 0;
+            const newPoints = currentPoints + 200;
+            
+            const { error: updateError } = await supabaseAdmin
+              .from("user_statistics")
+              .update({ points: newPoints })
+              .eq("user_id", userId);
+            
+            if (updateError) {
+              console.error(`❌ Error awarding bonus points to user ${userId}:`, updateError.message);
+              throw updateError;
+            }
+            
+            console.log(`✅ User ${userId} successfully subscribed and received 200 bonus points (${currentPoints} → ${newPoints})`);
+          } else {
+            // If for some reason the user doesn't have a stats record, create one
+            const { error: insertError } = await supabaseAdmin
+              .from("user_statistics")
+              .insert({
+                user_id: userId,
+                points: 200,
+                followers_gained: 0,
+                ideas_generated: 0,
+                analyses_completed: 0,
+                videos_shared: 0,
+                daily_challenges_completed: 0
+              });
+            
+            if (insertError) {
+              console.error(`❌ Error creating stats for user ${userId}:`, insertError.message);
+              throw insertError;
+            }
+            
+            console.log(`✅ User ${userId} successfully subscribed and received 200 bonus points (new record)`);
+          }
         } 
         // Handle one-time payment for points
         else if (session.mode === "payment") {
           const pointsToAdd = parseInt(session.metadata?.points || "100");
           
-          // Update user points
-          const { data: stats } = await supabaseAdmin
+          // Update user points - ENSURE THIS WORKS CORRECTLY
+          const { data: stats, error: statsError } = await supabaseAdmin
             .from("user_statistics")
             .select("points")
             .eq("user_id", userId)
             .single();
           
+          if (statsError) {
+            console.error(`❌ Error fetching stats for user ${userId}:`, statsError.message);
+            throw statsError;
+          }
+          
           if (stats) {
-            await supabaseAdmin
+            const currentPoints = stats.points || 0;
+            const newPoints = currentPoints + pointsToAdd;
+            
+            const { error: updateError } = await supabaseAdmin
               .from("user_statistics")
-              .update({ points: stats.points + pointsToAdd })
+              .update({ points: newPoints })
               .eq("user_id", userId);
 
-            console.log(`✅ User ${userId} purchased ${pointsToAdd} points`);
+            if (updateError) {
+              console.error(`❌ Error adding points to user ${userId}:`, updateError.message);
+              throw updateError;
+            }
+
+            console.log(`✅ User ${userId} purchased ${pointsToAdd} points (${currentPoints} → ${newPoints})`);
+          } else {
+            // If for some reason the user doesn't have a stats record, create one
+            const { error: insertError } = await supabaseAdmin
+              .from("user_statistics")
+              .insert({
+                user_id: userId,
+                points: pointsToAdd,
+                followers_gained: 0,
+                ideas_generated: 0,
+                analyses_completed: 0,
+                videos_shared: 0,
+                daily_challenges_completed: 0
+              });
+            
+            if (insertError) {
+              console.error(`❌ Error creating stats for user ${userId}:`, insertError.message);
+              throw insertError;
+            }
+            
+            console.log(`✅ User ${userId} purchased ${pointsToAdd} points (new record)`);
           }
         }
         break;
