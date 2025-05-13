@@ -1,12 +1,12 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { User, UserCheck, UserMinus, Pause, AlertCircle, CheckCircle, Star, Award } from "lucide-react";
+import { User, UserCheck, UserMinus, Pause, AlertCircle, CheckCircle, Award } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,8 +18,14 @@ import useSubscription from "@/hooks/useSubscription";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+interface ProfileData {
+  id: number;
+  username: string;
+  followers: number;
+}
+
 const ConnectEarn = () => {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const { stats, updateStat } = useUserStats();
   const { status: subscriptionStatus, loading: subscriptionLoading } = useSubscription();
   const [profileUsername, setProfileUsername] = useState("");
@@ -27,7 +33,6 @@ const ConnectEarn = () => {
   const [isProfileActive, setIsProfileActive] = useState(false);
   const [isWaitingConfirmation, setIsWaitingConfirmation] = useState<number | null>(null);
   const [countdownSeconds, setCountdownSeconds] = useState(5);
-  const [isPremium, setIsPremium] = useState(false);
   const [isLoadingCheckout, setIsLoadingCheckout] = useState(false);
   const [pointsToAdd, setPointsToAdd] = useState(100);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
@@ -35,15 +40,37 @@ const ConnectEarn = () => {
   const [showAdPopup, setShowAdPopup] = useState(false);
   const [adPopupTimer, setAdPopupTimer] = useState(10);
   const [showPointsPopover, setShowPointsPopover] = useState(false);
+  const [activeTab, setActiveTab] = useState("register");
+  const [availableProfiles, setAvailableProfiles] = useState<ProfileData[]>([]);
   const { toast } = useToast();
   
   // Fetch user premium status and daily points earned
   useEffect(() => {
     if (user) {
-      setIsPremium(subscriptionStatus.subscribed || false);
+      // Uses the isPremium flag from AuthContext
     }
-  }, [user, subscriptionStatus]);
+  }, [user, isPremium]);
 
+  // Fetch available profiles
+  useEffect(() => {
+    const fetchAvailableProfiles = async () => {
+      try {
+        // Simulate fetching profiles - in a real app, you would fetch from Supabase
+        // This is a placeholder for demonstration
+        const mockProfiles = [
+          { id: 1, username: "@usuario1", followers: 1200 },
+          { id: 2, username: "@creator123", followers: 850 },
+          { id: 3, username: "@tiktoker", followers: 3400 }
+        ];
+        setAvailableProfiles(mockProfiles);
+      } catch (error) {
+        console.error("Error fetching profiles:", error);
+      }
+    };
+    
+    fetchAvailableProfiles();
+  }, []);
+  
   // Show ad popup for free users after 60 seconds
   useEffect(() => {
     if (!isPremium && !showAdPopup) {
@@ -101,12 +128,22 @@ const ConnectEarn = () => {
     setIsProfileActive(true);
     localStorage.setItem("activeProfile", profileUsername);
     
+    // Add the new profile to available profiles (simulate this operation)
+    const newProfile = {
+      id: Date.now(), // Use timestamp as unique ID
+      username: profileUsername,
+      followers: 0
+    };
+    setAvailableProfiles(prev => [newProfile, ...prev]);
+    
     setSuccessMessage({
       title: "Perfil registrado com sucesso",
       message: "Seu perfil foi adicionado à lista para receber seguidores."
     });
     setShowSuccessMessage(true);
     
+    // Switch to the follow tab to show the newly added profile
+    setActiveTab("follow");
     setProfileUsername("");
   };
 
@@ -134,6 +171,11 @@ const ConnectEarn = () => {
     setActiveProfile(null);
     setIsProfileActive(false);
     localStorage.removeItem("activeProfile");
+    
+    // Remove profile from available profiles list
+    if (activeProfile) {
+      setAvailableProfiles(prev => prev.filter(profile => profile.username !== activeProfile));
+    }
     
     setSuccessMessage({
       title: "Perfil removido",
@@ -393,9 +435,6 @@ const ConnectEarn = () => {
         
         {!isPremium && (
           <Card className="bg-gradient-to-r from-tiktool-pink/10 to-tiktool-teal/10 border-tiktool-teal/20 relative overflow-hidden">
-            <div className="absolute -right-4 top-0 rotate-45 transform translate-y-2 bg-gradient-to-r from-amber-400 to-amber-500 text-white text-xs py-1 px-8 font-semibold">
-              Recomendado
-            </div>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Star className="text-amber-400 h-5 w-5" />
@@ -534,7 +573,7 @@ const ConnectEarn = () => {
           </CardContent>
         </Card>
         
-        <Tabs defaultValue="register" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-2 w-full">
             <TabsTrigger value="register">Meu Perfil</TabsTrigger>
             <TabsTrigger value="follow">Seguir Perfis</TabsTrigger>
@@ -660,32 +699,46 @@ const ConnectEarn = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {/* Usuários Premium terão seus perfis exibidos com prioridade */}
-                  {isWaitingConfirmation === 999 ? (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-tiktool-dark rounded-md gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 rounded-full bg-tiktool-gray flex items-center justify-center">
-                          <User className="text-white" />
+                  {availableProfiles.length > 0 ? (
+                    availableProfiles.map(profile => (
+                      <div 
+                        key={profile.id} 
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-4 bg-tiktool-dark rounded-md gap-4"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-full bg-tiktool-gray flex items-center justify-center">
+                            <User className="text-white" />
+                          </div>
+                          <div>
+                            <p className="font-medium">{profile.username}</p>
+                            <p className="text-sm text-muted-foreground">{profile.followers} seguidores</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium">@exemplo</p>
-                          <p className="text-sm text-muted-foreground">1000 seguidores</p>
-                        </div>
+                        
+                        {isWaitingConfirmation === profile.id ? (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">
+                              {countdownSeconds > 0 ? `Aguarde ${countdownSeconds}s` : ""}
+                            </span>
+                            <Button 
+                              onClick={handleConfirmFollow}
+                              disabled={countdownSeconds > 0}
+                              className="sm:flex-shrink-0"
+                            >
+                              Confirmar
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button 
+                            onClick={() => handleFollow(profile.id)}
+                            disabled={stats.points <= 0}
+                            className="sm:flex-shrink-0"
+                          >
+                            Seguir (+1 ponto)
+                          </Button>
+                        )}
                       </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">
-                          {countdownSeconds > 0 ? `Aguarde ${countdownSeconds}s` : ""}
-                        </span>
-                        <Button 
-                          onClick={handleConfirmFollow}
-                          disabled={countdownSeconds > 0}
-                          className="sm:flex-shrink-0"
-                        >
-                          Confirmar
-                        </Button>
-                      </div>
-                    </div>
+                    ))
                   ) : (
                     <div className="p-8 text-center">
                       <p className="text-muted-foreground">Não há perfis disponíveis para seguir no momento.</p>
@@ -703,3 +756,23 @@ const ConnectEarn = () => {
 };
 
 export default ConnectEarn;
+
+// Add the missing Star component import at the top
+function Star(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
