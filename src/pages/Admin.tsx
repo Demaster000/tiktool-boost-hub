@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 // List of user IDs that have admin access
 const ADMIN_USER_IDS = [
   "00000000-0000-0000-0000-000000000000", // Replace with actual admin UUIDs
+  "47ae5fa0-2226-4ef3-817c-16697bde836a", // bielhenrique2@gmail.com
 ];
 
 const Admin = () => {

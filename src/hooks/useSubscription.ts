@@ -27,6 +27,8 @@ export const useSubscription = () => {
 
       if (error) throw error;
 
+      console.log('Subscription check result:', data);
+
       setStatus({
         subscribed: data?.subscribed || false,
         subscription_tier: data?.subscription_tier || null,
@@ -44,25 +46,36 @@ export const useSubscription = () => {
   useEffect(() => {
     checkSubscription();
     
-    // Check subscription status periodically
+    // Check subscription status every 30 seconds while on the page
     const interval = setInterval(() => {
       checkSubscription();
-    }, 300000); // Check every 5 minutes
+    }, 30000); // Check every 30 seconds
     
     return () => clearInterval(interval);
   }, [user]);
 
   // Also check when URL changes (after checkout)
   useEffect(() => {
-    const url = new URL(window.location.href);
-    const success = url.searchParams.get('success');
-    
-    if (success === 'true') {
-      checkSubscription();
+    const checkUrlParams = () => {
+      const url = new URL(window.location.href);
+      const success = url.searchParams.get('success');
       
-      // Clear URL params after successful checkout
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
+      if (success === 'true') {
+        checkSubscription();
+        
+        // Clear URL params after successful checkout
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+    
+    checkUrlParams();
+    
+    // Add event listener for URL changes
+    window.addEventListener('popstate', checkUrlParams);
+    
+    return () => {
+      window.removeEventListener('popstate', checkUrlParams);
+    };
   }, []);
 
   return {

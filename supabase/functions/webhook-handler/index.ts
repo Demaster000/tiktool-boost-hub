@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@11.18.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
@@ -60,25 +61,27 @@ serve(async (req) => {
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
           
-          // Add 200 bonus points for new subscribers - ENSURE THIS WORKS CORRECTLY
-          const { data: stats, error: statsError } = await supabaseAdmin
+          // Check if user_statistics record exists
+          const { data: existingStats, error: checkError } = await supabaseAdmin
             .from("user_statistics")
-            .select("points")
+            .select("*")
             .eq("user_id", userId)
             .single();
-          
-          if (statsError) {
-            console.error(`❌ Error fetching stats for user ${userId}:`, statsError.message);
-            throw statsError;
+            
+          if (checkError && checkError.code !== 'PGRST116') { // Not found is OK
+            console.error(`Error checking for existing stats: ${checkError.message}`);
+            throw checkError;
           }
           
-          if (stats) {
-            const currentPoints = stats.points || 0;
-            const newPoints = currentPoints + 200;
-            
+          // Add 200 bonus points for new subscribers
+          if (existingStats) {
+            // Update existing record
             const { error: updateError } = await supabaseAdmin
               .from("user_statistics")
-              .update({ points: newPoints })
+              .update({
+                points: (existingStats.points || 0) + 200,
+                updated_at: new Date().toISOString()
+              })
               .eq("user_id", userId);
             
             if (updateError) {
@@ -86,9 +89,9 @@ serve(async (req) => {
               throw updateError;
             }
             
-            console.log(`✅ User ${userId} successfully subscribed and received 200 bonus points (${currentPoints} → ${newPoints})`);
+            console.log(`✅ User ${userId} successfully subscribed and received 200 bonus points (${existingStats.points} → ${existingStats.points + 200})`);
           } else {
-            // If for some reason the user doesn't have a stats record, create one
+            // Create new record if it doesn't exist
             const { error: insertError } = await supabaseAdmin
               .from("user_statistics")
               .insert({
@@ -113,26 +116,26 @@ serve(async (req) => {
         else if (session.mode === "payment") {
           const pointsToAdd = parseInt(session.metadata?.points || "100");
           
-          // Update user points - ENSURE THIS WORKS CORRECTLY
-          const { data: stats, error: statsError } = await supabaseAdmin
+          // Check if user_statistics record exists
+          const { data: existingStats, error: checkError } = await supabaseAdmin
             .from("user_statistics")
-            .select("points")
+            .select("*")
             .eq("user_id", userId)
             .single();
-          
-          if (statsError && statsError.code !== 'PGRST116') { // PGRST116 is "no rows returned" which is fine, we'll create a new record
-            console.error(`❌ Error fetching stats for user ${userId}:`, statsError.message);
-            throw statsError;
+            
+          if (checkError && checkError.code !== 'PGRST116') { // Not found is OK
+            console.error(`Error checking for existing stats: ${checkError.message}`);
+            throw checkError;
           }
           
-          const currentPoints = stats?.points || 0;
-          const newPoints = currentPoints + pointsToAdd;
-          
-          if (stats) {
+          if (existingStats) {
             // Update existing record
             const { error: updateError } = await supabaseAdmin
               .from("user_statistics")
-              .update({ points: newPoints })
+              .update({
+                points: (existingStats.points || 0) + pointsToAdd,
+                updated_at: new Date().toISOString()
+              })
               .eq("user_id", userId);
 
             if (updateError) {
@@ -140,9 +143,9 @@ serve(async (req) => {
               throw updateError;
             }
 
-            console.log(`✅ User ${userId} purchased ${pointsToAdd} points (${currentPoints} → ${newPoints})`);
+            console.log(`✅ User ${userId} purchased ${pointsToAdd} points (${existingStats.points} → ${existingStats.points + pointsToAdd})`);
           } else {
-            // Create new record
+            // Create new record if it doesn't exist
             const { error: insertError } = await supabaseAdmin
               .from("user_statistics")
               .insert({
@@ -152,7 +155,8 @@ serve(async (req) => {
                 ideas_generated: 0,
                 analyses_completed: 0,
                 videos_shared: 0,
-                daily_challenges_completed: 0
+                daily_challenges_completed: 0,
+                updated_at: new Date().toISOString()
               });
             
             if (insertError) {

@@ -45,6 +45,21 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2022-11-15" });
+    
+    // Get user statistics first to include in the response
+    const { data: userStats, error: statsError } = await supabaseClient
+      .from("user_statistics")
+      .select("points")
+      .eq("user_id", user.id)
+      .single();
+      
+    if (statsError && statsError.code !== 'PGRST116') {
+      logStep("Error fetching user statistics", { error: statsError.message });
+    }
+    
+    const points = userStats?.points || 0;
+    logStep("User statistics retrieved", { points });
+    
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     
     if (customers.data.length === 0) {
@@ -58,7 +73,10 @@ serve(async (req) => {
         points_earned_today: 0,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
-      return new Response(JSON.stringify({ subscribed: false }), {
+      return new Response(JSON.stringify({ 
+        subscribed: false, 
+        points 
+      }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
       });
@@ -122,8 +140,10 @@ serve(async (req) => {
     logStep("Updated database with subscription info", { subscribed: hasActiveSub });
     return new Response(JSON.stringify({
       subscribed: hasActiveSub,
+      subscription_tier: hasActiveSub ? "Premium" : null,
       subscription_end: subscriptionEnd,
-      points_earned_today: pointsEarnedToday
+      points_earned_today: pointsEarnedToday,
+      points: points
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
