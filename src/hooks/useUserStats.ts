@@ -33,6 +33,7 @@ export const useUserStats = () => {
       }
 
       try {
+        console.log("Fetching user stats for:", user.id);
         const { data, error } = await supabase
           .from('user_statistics')
           .select('points, followers_gained, ideas_generated, analyses_completed, videos_shared, daily_challenges_completed')
@@ -42,6 +43,7 @@ export const useUserStats = () => {
         if (error) throw error;
 
         if (data) {
+          console.log("Received user stats:", data);
           setStats({
             points: data.points || 0,
             followers_gained: data.followers_gained || 0,
@@ -100,19 +102,15 @@ export const useUserStats = () => {
     if (!user) return false;
 
     try {
-      // Check if the database has a videos_shared column - some users may not have this yet
-      const hasField = field === 'videos_shared' || field === 'daily_challenges_completed';
+      console.log(`Updating ${field} to ${value} for user ${user.id}`);
       
-      // Only update fields that exist in the database
-      const updateObject = {
-        [field]: value,
-        updated_at: new Date().toISOString()
-      };
-
       // Update the database
       const { error } = await supabase
         .from('user_statistics')
-        .update(updateObject)
+        .update({
+          [field]: value,
+          updated_at: new Date().toISOString()
+        })
         .eq('user_id', user.id);
 
       if (error) throw error;
@@ -134,9 +132,14 @@ export const useUserStats = () => {
       const currentValue = stats[field];
       const newValue = currentValue + amount;
       
+      console.log(`Incrementing ${field} by ${amount} to new value ${newValue} for user ${user.id}`);
+      
       const { error } = await supabase
         .from('user_statistics')
-        .update({ [field]: newValue })
+        .update({ 
+          [field]: newValue,
+          updated_at: new Date().toISOString()
+        })
         .eq('user_id', user.id);
 
       if (error) throw error;

@@ -107,16 +107,59 @@ Deno.serve(async (req) => {
     if (update_points && points !== undefined) {
       console.log(`Updating points to ${points} for user ${targetUserId}`);
       
-      const { data: pointsData, error: pointsError } = await supabase
+      // First check if user_statistics record exists
+      const { data: existingStats, error: statsError } = await supabase
         .from('user_statistics')
-        .update({ points })
-        .eq('user_id', targetUserId);
+        .select('user_id')
+        .eq('user_id', targetUserId)
+        .single();
       
-      if (pointsError) {
-        console.error("Error updating user points:", pointsError);
-        throw pointsError;
+      if (statsError && statsError.code !== 'PGRST116') {
+        console.error("Error checking user statistics:", statsError);
+        throw statsError;
       }
       
+      let updateResult;
+      
+      if (existingStats) {
+        // Update existing record
+        const { data: pointsData, error: pointsError } = await supabase
+          .from('user_statistics')
+          .update({ 
+            points,
+            updated_at: new Date().toISOString() 
+          })
+          .eq('user_id', targetUserId);
+        
+        if (pointsError) {
+          console.error("Error updating user points:", pointsError);
+          throw pointsError;
+        }
+        
+        updateResult = pointsData;
+      } else {
+        // Create new record if doesn't exist (shouldn't happen normally)
+        const { data: pointsData, error: pointsError } = await supabase
+          .from('user_statistics')
+          .insert({ 
+            user_id: targetUserId,
+            points,
+            followers_gained: 0,
+            ideas_generated: 0,
+            analyses_completed: 0,
+            videos_shared: 0,
+            daily_challenges_completed: 0
+          });
+        
+        if (pointsError) {
+          console.error("Error creating user statistics:", pointsError);
+          throw pointsError;
+        }
+        
+        updateResult = pointsData;
+      }
+      
+      console.log("Points update successful:", updateResult);
       responseData = { ...responseData, pointsUpdated: true };
     }
     

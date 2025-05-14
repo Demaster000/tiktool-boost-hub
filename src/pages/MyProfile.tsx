@@ -9,15 +9,16 @@ import useSubscription from "@/hooks/useSubscription";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CheckCircle, Award, ChevronRight } from "lucide-react";
+import { CheckCircle, Award, ChevronRight, RefreshCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/hooks/use-toast";
 
 const MyProfile = () => {
   const { user, isPremium } = useAuth();
   const { stats, loading: statsLoading } = useUserStats();
   const { status: subscriptionStatus, loading: subscriptionLoading } = useSubscription();
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
+  const [refreshingStats, setRefreshingStats] = useState(false);
   const { toast } = useToast();
 
   const formatDate = (dateString: string | null | undefined) => {
@@ -26,6 +27,37 @@ const MyProfile = () => {
       return format(new Date(dateString), "d 'de' MMMM, yyyy", { locale: ptBR });
     } catch (error) {
       return dateString;
+    }
+  };
+
+  // Function to manually refresh user stats
+  const refreshUserStats = async () => {
+    if (!user) return;
+    
+    setRefreshingStats(true);
+    
+    try {
+      const { data, error } = await supabase
+        .from('user_statistics')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+        
+      if (error) throw error;
+      
+      toast({
+        title: "Dados atualizados",
+        description: "Suas estatísticas foram atualizadas com sucesso.",
+      });
+    } catch (err) {
+      console.error("Error refreshing user stats:", err);
+      toast({
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar seus dados. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshingStats(false);
     }
   };
 
@@ -92,9 +124,20 @@ const MyProfile = () => {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Meu Perfil</h1>
-          <p className="text-muted-foreground">Informações da sua conta e assinatura</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Meu Perfil</h1>
+            <p className="text-muted-foreground">Informações da sua conta e assinatura</p>
+          </div>
+          
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={refreshUserStats}
+            disabled={refreshingStats || !user}
+          >
+            <RefreshCcw className={`h-5 w-5 ${refreshingStats ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
 
         {/* Account Information */}
@@ -262,7 +305,7 @@ const MyProfile = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-muted-foreground mb-1">Vídeos compartilhados</h3>
-                  <p className="text-2xl font-bold">{stats.videos_shared}</p>
+                  <p className="text-2xl font-bold">{stats.videos_shared || 0}</p>
                 </div>
               </div>
             )}
