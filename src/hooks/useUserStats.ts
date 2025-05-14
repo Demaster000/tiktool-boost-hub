@@ -63,7 +63,7 @@ export const useUserStats = () => {
 
     fetchStats();
     
-    // Set up realtime subscription to user statistics updates
+    // Set up realtime subscription to user statistics updates with improved handling
     if (user) {
       const statsChannel = supabase
         .channel('user-stats-changes')
@@ -76,23 +76,27 @@ export const useUserStats = () => {
           },
           (payload) => {
             console.log('Stats updated via realtime:', payload);
-            // Update our local state with the new data
+            // More robust handling of payload data
             if (payload.new) {
               setStats(prev => ({
                 ...prev,
-                points: payload.new.points || prev.points,
-                followers_gained: payload.new.followers_gained || prev.followers_gained,
-                ideas_generated: payload.new.ideas_generated || prev.ideas_generated,
-                analyses_completed: payload.new.analyses_completed || prev.analyses_completed,
-                videos_shared: payload.new.videos_shared || prev.videos_shared,
-                daily_challenges_completed: payload.new.daily_challenges_completed || prev.daily_challenges_completed
+                points: payload.new.points !== undefined ? payload.new.points : prev.points,
+                followers_gained: payload.new.followers_gained !== undefined ? payload.new.followers_gained : prev.followers_gained,
+                ideas_generated: payload.new.ideas_generated !== undefined ? payload.new.ideas_generated : prev.ideas_generated,
+                analyses_completed: payload.new.analyses_completed !== undefined ? payload.new.analyses_completed : prev.analyses_completed,
+                videos_shared: payload.new.videos_shared !== undefined ? payload.new.videos_shared : prev.videos_shared,
+                daily_challenges_completed: payload.new.daily_challenges_completed !== undefined ? 
+                  payload.new.daily_challenges_completed : prev.daily_challenges_completed
               }));
             }
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          console.log('Realtime subscription status:', status);
+        });
         
       return () => {
+        console.log('Cleaning up realtime subscription for user stats');
         supabase.removeChannel(statsChannel);
       };
     }
@@ -153,5 +157,44 @@ export const useUserStats = () => {
     }
   };
 
-  return { stats, loading, error, updateStat, incrementStat };
+  // Forced refresh function to get the latest data from the database
+  const refreshStats = async () => {
+    if (!user) return false;
+    
+    setLoading(true);
+    
+    try {
+      console.log("Manually refreshing user stats for:", user.id);
+      
+      const { data, error } = await supabase
+        .from('user_statistics')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (error) throw error;
+      
+      if (data) {
+        console.log("Refreshed user stats:", data);
+        setStats({
+          points: data.points || 0,
+          followers_gained: data.followers_gained || 0,
+          ideas_generated: data.ideas_generated || 0,
+          analyses_completed: data.analyses_completed || 0,
+          videos_shared: data.videos_shared || 0,
+          daily_challenges_completed: data.daily_challenges_completed || 0
+        });
+      }
+      
+      return true;
+    } catch (err: any) {
+      console.error('Error refreshing user stats:', err);
+      setError(err.message);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { stats, loading, error, updateStat, incrementStat, refreshStats };
 };

@@ -15,11 +15,18 @@ import { useToast } from "@/hooks/use-toast";
 
 const MyProfile = () => {
   const { user, isPremium } = useAuth();
-  const { stats, loading: statsLoading } = useUserStats();
-  const { status: subscriptionStatus, loading: subscriptionLoading } = useSubscription();
+  const { stats, loading: statsLoading, refreshStats } = useUserStats();
+  const { status: subscriptionStatus, loading: subscriptionLoading, checkSubscription } = useSubscription();
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
   const [refreshingStats, setRefreshingStats] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    // Auto-refresh stats when the page loads
+    if (user) {
+      refreshStats();
+    }
+  }, [user]);
 
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return "N/A";
@@ -31,29 +38,53 @@ const MyProfile = () => {
   };
 
   // Function to manually refresh user stats
-  const refreshUserStats = async () => {
+  const handleRefreshUserStats = async () => {
     if (!user) return;
     
     setRefreshingStats(true);
     
     try {
-      const { data, error } = await supabase
-        .from('user_statistics')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-        
-      if (error) throw error;
+      const success = await refreshStats();
       
-      toast({
-        title: "Dados atualizados",
-        description: "Suas estatísticas foram atualizadas com sucesso.",
-      });
+      if (success) {
+        toast({
+          title: "Dados atualizados",
+          description: "Suas estatísticas foram atualizadas com sucesso.",
+        });
+      } else {
+        throw new Error("Não foi possível atualizar os dados");
+      }
     } catch (err) {
       console.error("Error refreshing user stats:", err);
       toast({
         title: "Erro ao atualizar",
         description: "Não foi possível atualizar seus dados. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshingStats(false);
+    }
+  };
+
+  // Also refresh subscription status
+  const handleRefreshAll = async () => {
+    setRefreshingStats(true);
+    
+    try {
+      await Promise.all([
+        refreshStats(),
+        checkSubscription()
+      ]);
+      
+      toast({
+        title: "Dados atualizados",
+        description: "Todas as informações foram atualizadas com sucesso.",
+      });
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+      toast({
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar alguns dados. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -133,8 +164,9 @@ const MyProfile = () => {
           <Button
             variant="outline"
             size="icon"
-            onClick={refreshUserStats}
+            onClick={handleRefreshAll}
             disabled={refreshingStats || !user}
+            title="Atualizar todos os dados"
           >
             <RefreshCcw className={`h-5 w-5 ${refreshingStats ? 'animate-spin' : ''}`} />
           </Button>

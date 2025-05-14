@@ -14,6 +14,12 @@ const ADMIN_USER_IDS = [
   "47ae5fa0-2226-4ef3-817c-16697bde836a", // bielhenrique2@gmail.com
 ];
 
+// Utility function for consistent logging
+const logStep = (step: string, details?: any) => {
+  const detailsString = details ? ` - ${JSON.stringify(details)}` : '';
+  console.log(`[ADMIN-UPDATE-USER] ${step}${detailsString}`);
+};
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -21,6 +27,8 @@ Deno.serve(async (req) => {
   }
 
   try {
+    logStep("Function started");
+    
     // Get JWT token from request headers
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) {
@@ -35,14 +43,18 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
     if (userError || !user) {
+      logStep("Invalid token error", { error: userError?.message });
       return new Response(JSON.stringify({ error: 'Invalid token' }), { 
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
+    
+    logStep("User authenticated", { userId: user.id });
 
     // Check if user is admin
     const isAdmin = ADMIN_USER_IDS.includes(user.id);
+    logStep("Admin check", { isAdmin, userId: user.id });
 
     // Additional check from database if needed
     if (!isAdmin) {
@@ -53,6 +65,7 @@ Deno.serve(async (req) => {
         .single();
         
       if (adminError || !adminData) {
+        logStep("Unauthorized admin access attempt", { userId: user.id });
         return new Response(JSON.stringify({ error: 'Unauthorized' }), { 
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -65,13 +78,14 @@ Deno.serve(async (req) => {
     try {
       body = await req.json();
     } catch (e) {
+      logStep("Invalid JSON body", { error: e.message });
       return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
     
-    console.log("Received admin update request:", body);
+    logStep("Received admin update request", body);
     
     const { user_id: targetUserId, ban, update_points, points, update_premium, premium } = body;
 
@@ -86,7 +100,7 @@ Deno.serve(async (req) => {
 
     // Update user ban status
     if (ban !== undefined) {
-      console.log(`Setting ban status to ${ban} for user ${targetUserId}`);
+      logStep(`Setting ban status to ${ban} for user ${targetUserId}`);
       
       const { data: banData, error: banError } = await supabase.auth.admin.updateUserById(
         targetUserId, 
@@ -96,7 +110,7 @@ Deno.serve(async (req) => {
       );
       
       if (banError) {
-        console.error("Error updating user ban status:", banError);
+        logStep("Error updating user ban status", { error: banError });
         throw banError;
       }
       
@@ -105,7 +119,7 @@ Deno.serve(async (req) => {
 
     // Update user points
     if (update_points && points !== undefined) {
-      console.log(`Updating points to ${points} for user ${targetUserId}`);
+      logStep(`Updating points to ${points} for user ${targetUserId}`);
       
       // First check if user_statistics record exists
       const { data: existingStats, error: statsError } = await supabase
@@ -115,7 +129,7 @@ Deno.serve(async (req) => {
         .single();
       
       if (statsError && statsError.code !== 'PGRST116') {
-        console.error("Error checking user statistics:", statsError);
+        logStep("Error checking user statistics", { error: statsError });
         throw statsError;
       }
       
@@ -132,11 +146,12 @@ Deno.serve(async (req) => {
           .eq('user_id', targetUserId);
         
         if (pointsError) {
-          console.error("Error updating user points:", pointsError);
+          logStep("Error updating user points", { error: pointsError });
           throw pointsError;
         }
         
         updateResult = pointsData;
+        logStep("Points update successful", { user_id: targetUserId, points });
       } else {
         // Create new record if doesn't exist (shouldn't happen normally)
         const { data: pointsData, error: pointsError } = await supabase
@@ -152,20 +167,20 @@ Deno.serve(async (req) => {
           });
         
         if (pointsError) {
-          console.error("Error creating user statistics:", pointsError);
+          logStep("Error creating user statistics", { error: pointsError });
           throw pointsError;
         }
         
         updateResult = pointsData;
+        logStep("New user statistics record created with points", { user_id: targetUserId, points });
       }
       
-      console.log("Points update successful:", updateResult);
       responseData = { ...responseData, pointsUpdated: true };
     }
     
     // Update premium status
     if (update_premium && premium !== undefined) {
-      console.log(`Setting premium status to ${premium} for user ${targetUserId}`);
+      logStep(`Setting premium status to ${premium} for user ${targetUserId}`);
       
       // Check if subscription record exists
       const { data: existingSub, error: existingSubError } = await supabase
@@ -177,10 +192,14 @@ Deno.serve(async (req) => {
       let premiumData;
       
       if (existingSubError && existingSubError.code !== 'PGRST116') {
-        console.error("Error checking existing subscription:", existingSubError);
+        logStep("Error checking existing subscription", { error: existingSubError });
         throw existingSubError;
       }
 
+      const subscriptionEnd = premium 
+        ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() 
+        : null;
+      
       if (existingSub) {
         // Update existing record
         const { data, error: updateError } = await supabase
@@ -188,17 +207,18 @@ Deno.serve(async (req) => {
           .update({
             subscribed: premium,
             subscription_tier: premium ? 'premium' : null,
-            subscription_end: premium ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+            subscription_end: subscriptionEnd,
             updated_at: new Date().toISOString()
           })
           .eq('user_id', targetUserId);
         
         if (updateError) {
-          console.error("Error updating subscription status:", updateError);
+          logStep("Error updating subscription status", { error: updateError });
           throw updateError;
         }
         
         premiumData = data;
+        logStep("Updated subscription record", { user_id: targetUserId, premium, subscription_end: subscriptionEnd });
       } else if (premium) { 
         // Insert new record only if setting to premium
         const { data, error: insertError } = await supabase
@@ -207,15 +227,47 @@ Deno.serve(async (req) => {
             user_id: targetUserId,
             subscribed: true,
             subscription_tier: 'premium',
-            subscription_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            subscription_end: subscriptionEnd
           });
         
         if (insertError) {
-          console.error("Error creating subscription:", insertError);
+          logStep("Error creating subscription", { error: insertError });
           throw insertError;
         }
         
         premiumData = data;
+        logStep("Created new subscription record", { user_id: targetUserId, premium, subscription_end: subscriptionEnd });
+        
+        // If new premium subscription, add bonus points (200)
+        try {
+          const { data: statsData, error: statsError } = await supabase
+            .from('user_statistics')
+            .select('points')
+            .eq('user_id', targetUserId)
+            .single();
+            
+          if (statsError && statsError.code !== 'PGRST116') {
+            throw statsError;
+          }
+          
+          const currentPoints = statsData?.points || 0;
+          const newPoints = currentPoints + 200;
+          
+          const { error: pointsError } = await supabase
+            .from('user_statistics')
+            .update({ 
+              points: newPoints,
+              updated_at: new Date().toISOString() 
+            })
+            .eq('user_id', targetUserId);
+            
+          if (pointsError) throw pointsError;
+          
+          logStep("Added 200 bonus points for new premium subscription", { user_id: targetUserId, newPoints });
+        } catch (err) {
+          logStep("Warning: Could not add bonus points for premium", { error: err.message });
+          // Don't fail the entire operation for this
+        }
       }
       
       responseData = { ...responseData, premiumUpdated: true, premiumData };
@@ -223,13 +275,14 @@ Deno.serve(async (req) => {
 
     // Mark the operation as successful if we made it this far
     responseData.success = true;
+    logStep("Operation completed successfully", responseData);
 
     return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
-    console.error('Error:', error);
+    logStep('Error:', { message: error.message, stack: error.stack });
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

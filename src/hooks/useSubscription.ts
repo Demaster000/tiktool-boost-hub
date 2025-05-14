@@ -18,7 +18,7 @@ export const useSubscription = () => {
   const checkSubscription = async () => {
     if (!user) {
       setLoading(false);
-      return;
+      return false;
     }
 
     try {
@@ -35,9 +35,12 @@ export const useSubscription = () => {
         subscription_end: data?.subscription_end || null,
         points_earned_today: data?.points_earned_today || 0
       });
+      
+      return true;
     } catch (err: any) {
       console.error('Error checking subscription status:', err);
       setError(err.message);
+      return false;
     } finally {
       setLoading(false);
     }
