@@ -1,159 +1,131 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@11.18.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.4.0";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// Create Supabase client
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-// Helper logging function
-const logStep = (step: string, details?: any) => {
-  const detailsStr = details ? ` - ${JSON.stringify(details)}` : '';
-  console.log(`[CHECK-SUBSCRIPTION] ${step}${detailsStr}`);
-};
-
-serve(async (req) => {
+Deno.serve(async (req) => {
+  // Handle CORS pre-flight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  // Use the service role key to perform writes in Supabase
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
-  );
-
   try {
-    logStep("Function started");
-
-    const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("STRIPE_SECRET_KEY is not set");
-    logStep("Stripe key verified");
-
+    // Get current user from JWT
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("No authorization header provided");
-    logStep("Authorization header found");
+    
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
     const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
-    if (userError) throw new Error(`Authentication error: ${userError.message}`);
-    const user = userData.user;
-    if (!user?.email) throw new Error("User not authenticated or email not available");
-    logStep("User authenticated", { userId: user.id, email: user.email });
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
-    const stripe = new Stripe(stripeKey, { apiVersion: "2022-11-15" });
-    
-    // Get user statistics first to include in the response
-    const { data: userStats, error: statsError } = await supabaseClient
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    const userId = user.id;
+
+    // Get subscription status from subscribers table
+    const { data: subscriptionData, error: subscriptionError } = await supabase
+      .from("subscribers")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    // Also get the user's points
+    const { data: statsData, error: statsError } = await supabase
       .from("user_statistics")
       .select("points")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .single();
-      
-    if (statsError && statsError.code !== 'PGRST116') {
-      logStep("Error fetching user statistics", { error: statsError.message });
+
+    // Check if subscription is active based on end date
+    let isActive = false;
+    let subscriptionEndDate = null;
+    let pointsEarnedToday = 0;
+    
+    if (subscriptionData) {
+      isActive = subscriptionData.subscribed;
+      subscriptionEndDate = subscriptionData.subscription_end;
+      pointsEarnedToday = subscriptionData.points_earned_today || 0;
+
+      // Also check if subscription has expired
+      if (subscriptionData.subscription_end) {
+        const endDate = new Date(subscriptionData.subscription_end);
+        const now = new Date();
+        if (endDate < now) {
+          isActive = false;
+        }
+      }
+
+      // Reset daily points if last reset was more than 24 hours ago
+      if (subscriptionData.last_points_reset) {
+        const lastReset = new Date(subscriptionData.last_points_reset);
+        const now = new Date();
+        const hoursDifference = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursDifference >= 24) {
+          // Reset points_earned_today to 0
+          await supabase
+            .from("subscribers")
+            .update({
+              points_earned_today: 0,
+              last_points_reset: now.toISOString(),
+            })
+            .eq("user_id", userId);
+          
+          pointsEarnedToday = 0;
+        }
+      }
     }
-    
-    const points = userStats?.points || 0;
-    logStep("User statistics retrieved", { points });
-    
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    
-    if (customers.data.length === 0) {
-      logStep("No customer found, updating unsubscribed state");
-      await supabaseClient.from("subscribers").upsert({
-        user_id: user.id,
-        email: user.email,
+
+    const userPoints = statsData?.points || 0;
+
+    return new Response(
+      JSON.stringify({
+        subscribed: isActive,
+        subscription_tier: isActive ? "premium" : null,
+        subscription_end: subscriptionEndDate,
+        points_earned_today: pointsEarnedToday,
+        points: userPoints,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      }
+    );
+  } catch (error) {
+    console.error("Error checking subscription:", error);
+    return new Response(
+      JSON.stringify({
+        error: error.message,
         subscribed: false,
         subscription_tier: null,
         subscription_end: null,
         points_earned_today: 0,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
-      return new Response(JSON.stringify({ 
-        subscribed: false, 
-        points 
-      }), {
+        points: 0
+      }),
+      {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
-
-    const customerId = customers.data[0].id;
-    logStep("Found Stripe customer", { customerId });
-
-    const subscriptions = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "active",
-      limit: 1,
-    });
-    const hasActiveSub = subscriptions.data.length > 0;
-    let subscriptionEnd = null;
-
-    if (hasActiveSub) {
-      const subscription = subscriptions.data[0];
-      subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-      logStep("Active subscription found", { subscriptionId: subscription.id, endDate: subscriptionEnd });
-    } else {
-      logStep("No active subscription found");
-    }
-
-    // Reset points_earned_today at midnight
-    const now = new Date();
-    const todayMidnight = new Date(now);
-    todayMidnight.setHours(0, 0, 0, 0);
-    
-    const { data: subscriberData } = await supabaseClient
-      .from("subscribers")
-      .select("points_earned_today, last_points_reset")
-      .eq("user_id", user.id)
-      .single();
-    
-    let pointsEarnedToday = 0;
-    
-    if (subscriberData) {
-      const lastReset = subscriberData.last_points_reset ? new Date(subscriberData.last_points_reset) : null;
-      
-      if (!lastReset || lastReset < todayMidnight) {
-        // Reset points if it's a new day
-        pointsEarnedToday = 0;
-      } else {
-        pointsEarnedToday = subscriberData.points_earned_today || 0;
+        status: 500,
       }
-    }
-
-    await supabaseClient.from("subscribers").upsert({
-      email: user.email,
-      user_id: user.id,
-      stripe_customer_id: customerId,
-      subscribed: hasActiveSub,
-      subscription_tier: hasActiveSub ? "Premium" : null,
-      subscription_end: subscriptionEnd,
-      points_earned_today: pointsEarnedToday,
-      last_points_reset: now.toISOString(),
-      updated_at: now.toISOString(),
-    }, { onConflict: 'user_id' });
-
-    logStep("Updated database with subscription info", { subscribed: hasActiveSub });
-    return new Response(JSON.stringify({
-      subscribed: hasActiveSub,
-      subscription_tier: hasActiveSub ? "Premium" : null,
-      subscription_end: subscriptionEnd,
-      points_earned_today: pointsEarnedToday,
-      points: points
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR in check-subscription", { message: errorMessage });
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    );
   }
 });

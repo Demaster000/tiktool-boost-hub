@@ -1,147 +1,168 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import Stripe from "https://esm.sh/stripe@11.18.0";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.4.0";
+import { stripe } from "../_shared/stripe.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-serve(async (req) => {
+Deno.serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
-
-  // Create Supabase client using the auth context
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_ANON_KEY") ?? ""
-  );
 
   try {
-    const authHeader = req.headers.get("Authorization")!;
+    // Get JWT token from request headers
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: "Not authorized" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Verify user is logged in
     const token = authHeader.replace("Bearer ", "");
-    const { data } = await supabaseClient.auth.getUser(token);
-    const user = data.user;
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     
-    if (!user?.email) {
-      throw new Error("User not authenticated or email not available");
+    if (userError || !user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
-      apiVersion: "2022-11-15",
-    });
-
-    // Check if a Stripe customer record exists for this user
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    let customerId;
-    
-    if (customers.data.length > 0) {
-      customerId = customers.data[0].id;
-    } else {
-      // Create a new customer if one doesn't exist
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: {
-          user_id: user.id
-        }
-      });
-      customerId = customer.id;
+    // Get request body for checkout options
+    let body;
+    try {
+      body = await req.json();
+    } catch (e) {
+      body = {};
     }
-
-    const requestBody = await req.json();
-    const { mode } = requestBody;
     
-    if (mode === 'subscription') {
-      // Create subscription checkout session with trial period
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "brl",
-              product_data: {
-                name: "Plano Premium TikTool",
-                description: "Sem limites diários para ganhar pontos e prioridade na exibição do seu perfil",
-              },
-              unit_amount: 2990, // R$ 29,90 em centavos
-              recurring: {
-                interval: "month",
-              },
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "subscription",
-        success_url: `${req.headers.get("origin")}/connect-earn?success=true&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${req.headers.get("origin")}/connect-earn?canceled=true`,
-        metadata: {
-          user_id: user.id
-        },
-        subscription_data: {
-          trial_period_days: 7, // 7 day free trial
-          metadata: {
-            user_id: user.id
-          }
-        }
-      });
+    const mode = body.mode || "payment";
+    
+    // Find customer or create new one
+    const { data: customer, error: customerError } = await getOrCreateCustomer(user);
+    
+    if (customerError) {
+      throw customerError;
+    }
+    
+    const baseUrl = req.headers.get("origin") || "https://jemwnyrrjuffecuwntzw.lovable.ai";
+    const checkoutSession = await createCheckoutSession(mode, customer.id, baseUrl, user.id, body);
 
-      return new Response(JSON.stringify({ url: session.url }), {
+    return new Response(
+      JSON.stringify({ url: checkoutSession.url }),
+      {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 200,
-      });
-    } else {
-      // One-time payment for points
-      const points = requestBody.points || 100;
-      
-      // Calculate price based on points
-      let unitAmount = 1990; // Default 19.90 for 100 points
-
-      if (points === 300) {
-        unitAmount = 4990; // 49.90 for 300 points
-      } else if (points === 500) {
-        unitAmount = 7990; // 79.90 for 500 points
-      } else if (points === 1000) {
-        unitAmount = 14990; // 149.90 for 1000 points
       }
-
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "brl",
-              product_data: {
-                name: `${points} Pontos TikTool`,
-                description: "Pontos para receber seguidores no TikTok",
-              },
-              unit_amount: unitAmount,
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `${req.headers.get("origin")}/connect-earn?success=true&points=${points}&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${req.headers.get("origin")}/connect-earn?canceled=true`,
-        metadata: {
-          user_id: user.id,
-          points: points.toString()
-        }
-      });
-
-      return new Response(JSON.stringify({ url: session.url }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      });
-    }
+    );
   } catch (error) {
-    console.error("Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+      }
+    );
   }
 });
+
+// Helper functions
+
+async function getOrCreateCustomer(user) {
+  // Check if user already has a customer account
+  const { data: subscriber, error: subError } = await supabase
+    .from("subscribers")
+    .select("stripe_customer_id")
+    .eq("user_id", user.id)
+    .single();
+  
+  if (subError && subError.code !== "PGRST116") {
+    // If there's an error other than "no rows returned"
+    throw subError;
+  }
+  
+  if (subscriber?.stripe_customer_id) {
+    // Return existing customer
+    return { data: { id: subscriber.stripe_customer_id }, error: null };
+  }
+  
+  // Create new customer
+  try {
+    const customer = await stripe.customers.create({
+      email: user.email,
+      metadata: {
+        user_id: user.id,
+      },
+    });
+    
+    // Store Stripe customer ID in Supabase
+    const { error: insertError } = await supabase
+      .from("subscribers")
+      .insert({
+        user_id: user.id,
+        stripe_customer_id: customer.id,
+        email: user.email,
+      });
+    
+    if (insertError) {
+      console.error("Error storing customer ID:", insertError);
+      // Don't throw here, we still want to proceed with checkout
+    }
+    
+    return { data: customer, error: null };
+  } catch (error) {
+    console.error("Error creating customer:", error);
+    return { data: null, error };
+  }
+}
+
+async function createCheckoutSession(mode, customerId, baseUrl, userId, options = {}) {
+  const lineItems = [];
+  const metadata = { user_id: userId };
+  
+  if (mode === "subscription") {
+    // Subscription checkout
+    lineItems.push({
+      price: "price_1P34vrGSrWGk6AHMz2GXD5f3", // Replace with your actual price ID
+      quantity: 1,
+    });
+  } else {
+    // One-time payment for points
+    const pointsAmount = options.points || 100;
+    
+    metadata.points = pointsAmount.toString();
+    
+    lineItems.push({
+      price_data: {
+        currency: "brl",
+        product_data: {
+          name: `${pointsAmount} Pontos`,
+          description: `Pacote de ${pointsAmount} pontos para TikTool`,
+        },
+        unit_amount: pointsAmount * 10, // 100 points = R$ 10,00, so 1 point = R$ 0.10
+      },
+      quantity: 1,
+    });
+  }
+  
+  return stripe.checkout.sessions.create({
+    customer: customerId,
+    line_items: lineItems,
+    mode: mode,
+    success_url: `${baseUrl}?success=true`,
+    cancel_url: `${baseUrl}?canceled=true`,
+    metadata: metadata,
+  });
+}
