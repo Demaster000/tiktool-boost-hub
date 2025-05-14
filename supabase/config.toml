@@ -3,3 +3,30 @@ project_id = "jemwnyrrjuffecuwntzw"
 
 [functions.webhook-handler]
 verify_jwt = false
+
+[functions.admin-list-users]
+verify_jwt = true
+
+[functions.admin-update-user]
+verify_jwt = true
+
+[functions.check-subscription]
+verify_jwt = true
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+[realtime]
+enabled = true
+
+[[realtime.tables]]
+name = "subscribers"
+
+[[realtime.tables]]
+name = "user_statistics"
+
+[[realtime.tables]]
+name = "tiktok_public_profiles"

@@ -54,48 +54,73 @@ const UserManagement = () => {
     try {
       setLoading(true);
       
-      // Get users from auth.users
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+      // Get user list through Supabase function to avoid direct auth table access limitations
+      const { data: authUsersData, error: authError } = await supabase
+        .from('user_statistics')
+        .select('user_id')
+        .order('created_at', { ascending: false });
       
       if (authError) throw authError;
       
-      if (!authUsers?.users) {
+      if (!authUsersData || authUsersData.length === 0) {
         setUsers([]);
         return;
       }
       
-      // Get subscription status
+      // Collect user IDs to fetch email from auth.users
+      const userIds = authUsersData.map(item => item.user_id);
+      
+      // Fetch user emails using the admin.listUsers function
+      // For security reasons, we'll use a dedicated Supabase edge function
+      const { data: userEmailsData, error: emailsError } = await supabase.functions.invoke('admin-list-users', {
+        body: { user_ids: userIds }
+      });
+      
+      if (emailsError) {
+        console.error("Error fetching user emails:", emailsError);
+        throw new Error("Erro ao buscar emails dos usuários");
+      }
+      
+      // Now fetch subscription status
       const { data: subscribers, error: subError } = await supabase
         .from('subscribers')
         .select('user_id, subscribed');
-        
+      
+      if (subError) throw subError;
+      
       // Get points
       const { data: statistics, error: statsError } = await supabase
         .from('user_statistics')
-        .select('user_id, points');
+        .select('user_id, points, created_at');
+      
+      if (statsError) throw statsError;
+      
+      // Combine all the data
+      const combinedUsers: UserData[] = [];
+      
+      for (const userData of statistics || []) {
+        const userEmail = userEmailsData.find((u: any) => u.id === userData.user_id);
+        const subscription = subscribers?.find(sub => sub.user_id === userData.user_id);
         
-      // Combine the data
-      const combinedUsers = authUsers.users.map(user => {
-        const subscription = subscribers?.find(sub => sub.user_id === user.id);
-        const stats = statistics?.find(stat => stat.user_id === user.id);
-        
-        return {
-          id: user.id,
-          email: user.email || 'No email',
-          created_at: user.created_at,
-          last_sign_in_at: user.last_sign_in_at,
-          is_banned: user.banned || false,
-          premium: subscription?.subscribed || false,
-          points: stats?.points || 0
-        };
-      });
+        if (userEmail) {
+          combinedUsers.push({
+            id: userData.user_id,
+            email: userEmail.email || 'No email',
+            created_at: userData.created_at || new Date().toISOString(),
+            last_sign_in_at: userEmail.last_sign_in_at,
+            is_banned: userEmail.banned || false,
+            premium: subscription?.subscribed || false,
+            points: userData.points || 0
+          });
+        }
+      }
       
       setUsers(combinedUsers);
     } catch (error) {
       console.error("Error fetching users:", error);
       toast({
         title: "Erro ao carregar usuários",
-        description: "Não foi possível obter a lista de usuários.",
+        description: "Não foi possível obter a lista de usuários. Talvez seja necessário criar a função de Edge 'admin-list-users'.",
         variant: "destructive",
       });
     } finally {
@@ -109,10 +134,15 @@ const UserManagement = () => {
 
   const handleBanUser = async (userId: string, isBanned: boolean) => {
     try {
-      // Update user ban status
-      await supabase.auth.admin.updateUserById(userId, { 
-        ban_duration: isBanned ? 'none' : 'forever'
+      // Call admin function to update user ban status
+      const { error } = await supabase.functions.invoke('admin-update-user', {
+        body: { 
+          user_id: userId,
+          ban: !isBanned
+        }
       });
+      
+      if (error) throw error;
       
       // Update local state
       setUsers(users.map(user => 

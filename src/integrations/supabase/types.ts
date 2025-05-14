@@ -72,6 +72,36 @@ export type Database = {
         }
         Relationships: []
       }
+      tiktok_public_profiles: {
+        Row: {
+          created_at: string | null
+          followers_count: number | null
+          id: string
+          status: string
+          updated_at: string | null
+          user_id: string
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          followers_count?: number | null
+          id?: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          followers_count?: number | null
+          id?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
       tiktok_videos: {
         Row: {
           created_at: string | null
