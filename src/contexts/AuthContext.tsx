@@ -17,6 +17,13 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Add this to window for external use (like subscription update)
+declare global {
+  interface Window {
+    updateUserPremiumStatus?: (isPremium: boolean) => void;
+  }
+}
+
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -27,11 +34,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!user) return;
     
     try {
+      console.log("Checking subscription status for user:", user.id);
       const { data, error } = await supabase.functions.invoke('check-subscription');
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error from check-subscription function:", error);
+        throw error;
+      }
       
       if (data) {
+        console.log("Subscription check response:", data);
         setIsPremium(data.subscribed === true);
       }
     } catch (error) {
@@ -39,10 +51,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  // Make function available to other components
+  useEffect(() => {
+    window.updateUserPremiumStatus = setIsPremium;
+    
+    return () => {
+      delete window.updateUserPremiumStatus;
+    };
+  }, []);
+
   useEffect(() => {
     // Set up auth state listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        console.log("Auth state changed:", event, session?.user?.id);
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -60,6 +82,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("Got existing session:", session?.user?.id);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
@@ -72,8 +95,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     });
 
+    // Set up realtime subscription listener for subscription changes
+    if (user) {
+      const subscriptionChannel = supabase
+        .channel('subscription-changes')
+        .on('postgres_changes', 
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'subscribers',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Subscription updated via realtime:', payload);
+            if (payload.new && payload.new.subscribed !== undefined) {
+              setIsPremium(payload.new.subscribed === true);
+            }
+          }
+        )
+        .subscribe();
+        
+      return () => {
+        subscription.unsubscribe();
+        supabase.removeChannel(subscriptionChannel);
+      };
+    }
+
     return () => subscription.unsubscribe();
-  }, []);
+  }, [user?.id]);
 
   const signUp = async (email: string, password: string, name: string) => {
     try {

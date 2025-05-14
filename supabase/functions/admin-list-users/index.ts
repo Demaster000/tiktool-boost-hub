@@ -64,38 +64,56 @@ Deno.serve(async (req) => {
     let body;
     try {
       body = await req.json();
-    } catch {
-      body = {};
+    } catch (e) {
+      console.error("Failed to parse request body:", e);
+      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
     }
     
-    const userIds = body.user_ids || [];
+    const { user_ids } = body;
 
-    if (!userIds.length) {
-      return new Response(JSON.stringify({ error: 'No user IDs provided' }), { 
+    if (!user_ids || !Array.isArray(user_ids) || user_ids.length === 0) {
+      return new Response(JSON.stringify({ error: 'User IDs array is required' }), { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
     }
 
-    // Get user data
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers();
+    console.log(`Fetching details for ${user_ids.length} users`);
     
-    if (authError) {
-      console.error("Error fetching auth users:", authError);
-      throw authError;
+    // Process in batches of 10 users to avoid timeouts
+    const BATCH_SIZE = 10;
+    const userDetails = [];
+    
+    for (let i = 0; i < user_ids.length; i += BATCH_SIZE) {
+      const batchIds = user_ids.slice(i, i + BATCH_SIZE);
+      console.log(`Processing batch ${i/BATCH_SIZE + 1}, users ${i+1}-${Math.min(i+BATCH_SIZE, user_ids.length)}`);
+      
+      // Use Promise.all to fetch multiple users in parallel
+      const batchPromises = batchIds.map(async (userId: string) => {
+        const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+        
+        if (userError) {
+          console.error(`Error fetching user ${userId}:`, userError);
+          return null;
+        }
+        
+        return {
+          id: userData.user.id,
+          email: userData.user.email,
+          last_sign_in_at: userData.user.last_sign_in_at,
+          created_at: userData.user.created_at,
+          banned: userData.user.banned
+        };
+      });
+      
+      const batchResults = await Promise.all(batchPromises);
+      userDetails.push(...batchResults.filter(user => user !== null));
     }
-    
-    // Filter users by provided IDs and extract needed fields
-    const filteredUsers = authUsers.users
-      .filter(authUser => userIds.includes(authUser.id))
-      .map(user => ({
-        id: user.id,
-        email: user.email,
-        last_sign_in_at: user.last_sign_in_at,
-        banned: user.banned
-      }));
 
-    return new Response(JSON.stringify(filteredUsers), {
+    return new Response(JSON.stringify(userDetails), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });

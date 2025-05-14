@@ -71,7 +71,9 @@ Deno.serve(async (req) => {
       });
     }
     
-    const { user_id: targetUserId, ban } = body;
+    console.log("Received admin update request:", body);
+    
+    const { user_id: targetUserId, ban, update_points, points, update_premium, premium } = body;
 
     if (!targetUserId) {
       return new Response(JSON.stringify({ error: 'User ID is required' }), { 
@@ -80,20 +82,106 @@ Deno.serve(async (req) => {
       });
     }
 
+    let responseData = { success: false };
+
     // Update user ban status
-    const { data, error } = await supabase.auth.admin.updateUserById(
-      targetUserId, 
-      { 
-        ban_duration: ban ? 'forever' : 'none'
+    if (ban !== undefined) {
+      console.log(`Setting ban status to ${ban} for user ${targetUserId}`);
+      
+      const { data: banData, error: banError } = await supabase.auth.admin.updateUserById(
+        targetUserId, 
+        { 
+          ban_duration: ban ? 'forever' : 'none'
+        }
+      );
+      
+      if (banError) {
+        console.error("Error updating user ban status:", banError);
+        throw banError;
       }
-    );
-    
-    if (error) {
-      console.error("Error updating user:", error);
-      throw error;
+      
+      responseData = { ...responseData, banUpdated: true, banData };
     }
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    // Update user points
+    if (update_points && points !== undefined) {
+      console.log(`Updating points to ${points} for user ${targetUserId}`);
+      
+      const { data: pointsData, error: pointsError } = await supabase
+        .from('user_statistics')
+        .update({ points })
+        .eq('user_id', targetUserId);
+      
+      if (pointsError) {
+        console.error("Error updating user points:", pointsError);
+        throw pointsError;
+      }
+      
+      responseData = { ...responseData, pointsUpdated: true };
+    }
+    
+    // Update premium status
+    if (update_premium && premium !== undefined) {
+      console.log(`Setting premium status to ${premium} for user ${targetUserId}`);
+      
+      // Check if subscription record exists
+      const { data: existingSub, error: existingSubError } = await supabase
+        .from('subscribers')
+        .select('id')
+        .eq('user_id', targetUserId)
+        .single();
+      
+      let premiumData;
+      
+      if (existingSubError && existingSubError.code !== 'PGRST116') {
+        console.error("Error checking existing subscription:", existingSubError);
+        throw existingSubError;
+      }
+
+      if (existingSub) {
+        // Update existing record
+        const { data, error: updateError } = await supabase
+          .from('subscribers')
+          .update({
+            subscribed: premium,
+            subscription_tier: premium ? 'premium' : null,
+            subscription_end: premium ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', targetUserId);
+        
+        if (updateError) {
+          console.error("Error updating subscription status:", updateError);
+          throw updateError;
+        }
+        
+        premiumData = data;
+      } else if (premium) { 
+        // Insert new record only if setting to premium
+        const { data, error: insertError } = await supabase
+          .from('subscribers')
+          .insert({
+            user_id: targetUserId,
+            subscribed: true,
+            subscription_tier: 'premium',
+            subscription_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+          });
+        
+        if (insertError) {
+          console.error("Error creating subscription:", insertError);
+          throw insertError;
+        }
+        
+        premiumData = data;
+      }
+      
+      responseData = { ...responseData, premiumUpdated: true, premiumData };
+    }
+
+    // Mark the operation as successful if we made it this far
+    responseData.success = true;
+
+    return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });

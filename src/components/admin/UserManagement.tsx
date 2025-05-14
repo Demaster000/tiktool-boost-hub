@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Ban, Award, User, Edit, Save, X, Check } from "lucide-react";
+import { Ban, Award, User, Edit, Save, X, Check, RefreshCcw } from "lucide-react";
 import { 
   Table, 
   TableBody, 
@@ -37,6 +37,7 @@ interface UserData {
 const UserManagement = () => {
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updatingUser, setUpdatingUser] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editPoints, setEditPoints] = useState<number>(0);
@@ -48,6 +49,29 @@ const UserManagement = () => {
 
   useEffect(() => {
     fetchUsers();
+
+    // Set up realtime subscription for updates
+    const usersChannel = supabase
+      .channel('admin-users-updates')
+      .on('postgres_changes', 
+        { event: 'UPDATE', schema: 'public', table: 'user_statistics' },
+        () => {
+          console.log('User statistics updated, refreshing data');
+          fetchUsers();
+        }
+      )
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'subscribers' },
+        () => {
+          console.log('Subscriptions updated, refreshing data');
+          fetchUsers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(usersChannel);
+    };
   }, []);
 
   const fetchUsers = async () => {
@@ -55,23 +79,24 @@ const UserManagement = () => {
       setLoading(true);
       
       // Get user list through Supabase function to avoid direct auth table access limitations
-      const { data: authUsersData, error: authError } = await supabase
+      const { data: userStatistics, error: statsError } = await supabase
         .from('user_statistics')
-        .select('user_id')
+        .select('user_id, points, created_at')
         .order('created_at', { ascending: false });
       
-      if (authError) throw authError;
+      if (statsError) throw statsError;
       
-      if (!authUsersData || authUsersData.length === 0) {
+      if (!userStatistics || userStatistics.length === 0) {
         setUsers([]);
+        setLoading(false);
         return;
       }
       
       // Collect user IDs to fetch email from auth.users
-      const userIds = authUsersData.map(item => item.user_id);
+      const userIds = userStatistics.map(item => item.user_id);
       
-      // Fetch user emails using the admin.listUsers function
-      // For security reasons, we'll use a dedicated Supabase edge function
+      // Fetch user emails using admin function
+      console.log('Fetching user emails for', userIds.length, 'users');
       const { data: userEmailsData, error: emailsError } = await supabase.functions.invoke('admin-list-users', {
         body: { user_ids: userIds }
       });
@@ -81,6 +106,8 @@ const UserManagement = () => {
         throw new Error("Erro ao buscar emails dos usuários");
       }
       
+      console.log('Received email data for', userEmailsData?.length || 0, 'users');
+      
       // Now fetch subscription status
       const { data: subscribers, error: subError } = await supabase
         .from('subscribers')
@@ -88,18 +115,11 @@ const UserManagement = () => {
       
       if (subError) throw subError;
       
-      // Get points
-      const { data: statistics, error: statsError } = await supabase
-        .from('user_statistics')
-        .select('user_id, points, created_at');
-      
-      if (statsError) throw statsError;
-      
       // Combine all the data
       const combinedUsers: UserData[] = [];
       
-      for (const userData of statistics || []) {
-        const userEmail = userEmailsData.find((u: any) => u.id === userData.user_id);
+      for (const userData of userStatistics || []) {
+        const userEmail = userEmailsData?.find((u: any) => u.id === userData.user_id);
         const subscription = subscribers?.find(sub => sub.user_id === userData.user_id);
         
         if (userEmail) {
@@ -120,7 +140,7 @@ const UserManagement = () => {
       console.error("Error fetching users:", error);
       toast({
         title: "Erro ao carregar usuários",
-        description: "Não foi possível obter a lista de usuários. Talvez seja necessário criar a função de Edge 'admin-list-users'.",
+        description: "Não foi possível obter a lista de usuários. Tente novamente mais tarde.",
         variant: "destructive",
       });
     } finally {
@@ -134,8 +154,10 @@ const UserManagement = () => {
 
   const handleBanUser = async (userId: string, isBanned: boolean) => {
     try {
+      setUpdatingUser(userId);
+      
       // Call admin function to update user ban status
-      const { error } = await supabase.functions.invoke('admin-update-user', {
+      const { data, error } = await supabase.functions.invoke('admin-update-user', {
         body: { 
           user_id: userId,
           ban: !isBanned
@@ -143,6 +165,10 @@ const UserManagement = () => {
       });
       
       if (error) throw error;
+      
+      if (!data?.success) {
+        throw new Error("A operação falhou no servidor");
+      }
       
       // Update local state
       setUsers(users.map(user => 
@@ -153,13 +179,15 @@ const UserManagement = () => {
         title: isBanned ? "Usuário desbanido" : "Usuário banido",
         description: `O usuário foi ${isBanned ? 'desbanido' : 'banido'} com sucesso.`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error toggling ban status:", error);
       toast({
         title: "Erro ao alterar status do usuário",
-        description: "Não foi possível alterar o status de banimento.",
+        description: "Não foi possível alterar o status de banimento: " + (error.message || "Erro desconhecido"),
         variant: "destructive",
       });
+    } finally {
+      setUpdatingUser(null);
     }
   };
 
@@ -173,6 +201,8 @@ const UserManagement = () => {
     if (!selectedUser) return;
     
     try {
+      setUpdatingUser(selectedUser.id);
+      
       // Get current points
       const { data, error } = await supabase
         .from('user_statistics')
@@ -185,11 +215,20 @@ const UserManagement = () => {
       const currentPoints = data?.points || 0;
       const newPoints = currentPoints + pointsToAdd;
       
-      // Update points
-      await supabase
-        .from('user_statistics')
-        .update({ points: newPoints })
-        .eq('user_id', selectedUser.id);
+      // Update points using admin function for better tracking
+      const { data: updateData, error: updateError } = await supabase.functions.invoke('admin-update-user', {
+        body: {
+          user_id: selectedUser.id,
+          update_points: true,
+          points: newPoints
+        }
+      });
+      
+      if (updateError) throw updateError;
+      
+      if (!updateData?.success) {
+        throw new Error("A operação falhou no servidor");
+      }
       
       // Update local state
       setUsers(users.map(user => 
@@ -202,13 +241,15 @@ const UserManagement = () => {
       });
       
       setShowPointsDialog(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding points:", error);
       toast({
         title: "Erro ao adicionar pontos",
-        description: "Não foi possível atualizar os pontos.",
+        description: "Não foi possível atualizar os pontos: " + (error.message || "Erro desconhecido"),
         variant: "destructive",
       });
+    } finally {
+      setUpdatingUser(null);
     }
   };
 
@@ -222,36 +263,21 @@ const UserManagement = () => {
     if (!selectedUser) return;
     
     try {
-      // Check if subscription record exists
-      const { data, error } = await supabase
-        .from('subscribers')
-        .select('id')
-        .eq('user_id', selectedUser.id)
-        .single();
+      setUpdatingUser(selectedUser.id);
       
-      if (error && error.code !== 'PGRST116') {
-        throw error;
-      }
+      // Update premium status using admin function
+      const { data, error } = await supabase.functions.invoke('admin-update-user', {
+        body: {
+          user_id: selectedUser.id,
+          update_premium: true,
+          premium: isPremium
+        }
+      });
       
-      if (data) {
-        // Update existing record
-        await supabase
-          .from('subscribers')
-          .update({ 
-            subscribed: isPremium,
-            subscription_tier: isPremium ? 'Premium' : null,
-            updated_at: new Date().toISOString()
-          })
-          .eq('user_id', selectedUser.id);
-      } else {
-        // Insert new record
-        await supabase
-          .from('subscribers')
-          .insert({
-            user_id: selectedUser.id,
-            subscribed: isPremium,
-            subscription_tier: isPremium ? 'Premium' : null,
-          });
+      if (error) throw error;
+      
+      if (!data?.success) {
+        throw new Error("A operação falhou no servidor");
       }
       
       // Update local state
@@ -265,20 +291,32 @@ const UserManagement = () => {
       });
       
       setShowPlanDialog(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating plan:", error);
       toast({
         title: "Erro ao atualizar plano",
-        description: "Não foi possível alterar o plano do usuário.",
+        description: "Não foi possível alterar o plano do usuário: " + (error.message || "Erro desconhecido"),
         variant: "destructive",
       });
+    } finally {
+      setUpdatingUser(null);
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Gerenciamento de Usuários</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">Gerenciamento de Usuários</h2>
+          <Button 
+            variant="outline" 
+            size="icon"
+            onClick={fetchUsers}
+            disabled={loading}
+          >
+            <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
         <div className="w-72">
           <Input
             placeholder="Buscar por email..."
@@ -354,26 +392,52 @@ const UserManagement = () => {
                           variant="ghost"
                           onClick={async () => {
                             try {
-                              await supabase
-                                .from('user_statistics')
-                                .update({ points: editPoints })
-                                .eq('user_id', user.id);
-                                
+                              setUpdatingUser(user.id);
+                              
+                              // Use admin function to update points
+                              const { data, error } = await supabase.functions.invoke('admin-update-user', {
+                                body: {
+                                  user_id: user.id,
+                                  update_points: true,
+                                  points: editPoints
+                                }
+                              });
+                              
+                              if (error) throw error;
+                              
+                              if (!data?.success) {
+                                throw new Error("A operação falhou no servidor");
+                              }
+                              
+                              // Update local state
                               setUsers(users.map(u => 
                                 u.id === user.id ? { ...u, points: editPoints } : u
                               ));
+                              
+                              toast({
+                                title: "Pontos atualizados",
+                                description: `Os pontos foram atualizados para ${editPoints}.`,
+                              });
+                              
                               setEditingUserId(null);
-                            } catch (error) {
+                            } catch (error: any) {
                               console.error("Error updating points:", error);
                               toast({
                                 title: "Erro",
-                                description: "Não foi possível atualizar os pontos.",
+                                description: "Não foi possível atualizar os pontos: " + (error.message || "Erro desconhecido"),
                                 variant: "destructive",
                               });
+                            } finally {
+                              setUpdatingUser(null);
                             }
                           }}
+                          disabled={updatingUser === user.id}
                         >
-                          <Save className="h-4 w-4" />
+                          {updatingUser === user.id ? (
+                            <div className="animate-spin h-4 w-4 border-t-2 border-b-2 border-current rounded-full" />
+                          ) : (
+                            <Save className="h-4 w-4" />
+                          )}
                         </Button>
                         <Button 
                           size="icon" 
@@ -405,14 +469,22 @@ const UserManagement = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => handleBanUser(user.id, user.is_banned)}
+                        disabled={updatingUser === user.id}
                       >
-                        {user.is_banned ? <Check className="h-4 w-4 mr-1" /> : <Ban className="h-4 w-4 mr-1" />}
+                        {updatingUser === user.id ? (
+                          <div className="animate-spin h-4 w-4 mr-1 border-t-2 border-b-2 border-current rounded-full" />
+                        ) : user.is_banned ? (
+                          <Check className="h-4 w-4 mr-1" />
+                        ) : (
+                          <Ban className="h-4 w-4 mr-1" />
+                        )}
                         {user.is_banned ? "Desbanir" : "Banir"}
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => openPointsDialog(user)}
+                        disabled={updatingUser === user.id}
                       >
                         <Award className="h-4 w-4 mr-1" />
                         Pontos
@@ -421,6 +493,7 @@ const UserManagement = () => {
                         variant="outline"
                         size="sm"
                         onClick={() => openPlanDialog(user)}
+                        disabled={updatingUser === user.id}
                       >
                         <User className="h-4 w-4 mr-1" />
                         Plano
@@ -462,7 +535,13 @@ const UserManagement = () => {
             <Button variant="outline" onClick={() => setShowPointsDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleAddPoints}>
+            <Button 
+              onClick={handleAddPoints}
+              disabled={updatingUser === selectedUser?.id}
+            >
+              {updatingUser === selectedUser?.id ? (
+                <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-b-2 border-current rounded-full" />
+              ) : null}
               Adicionar Pontos
             </Button>
           </DialogFooter>
@@ -498,7 +577,13 @@ const UserManagement = () => {
             <Button variant="outline" onClick={() => setShowPlanDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleUpdatePlan}>
+            <Button 
+              onClick={handleUpdatePlan}
+              disabled={updatingUser === selectedUser?.id}
+            >
+              {updatingUser === selectedUser?.id ? (
+                <div className="animate-spin h-4 w-4 mr-2 border-t-2 border-b-2 border-current rounded-full" />
+              ) : null}
               Salvar Alterações
             </Button>
           </DialogFooter>

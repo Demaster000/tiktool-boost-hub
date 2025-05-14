@@ -1,14 +1,74 @@
 
+import { useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import FeatureCard from "@/components/FeatureCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Hash, TrendingUp, User, Video, ThumbsUp, Award } from "lucide-react";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const Dashboard = () => {
   const { stats, loading } = useUserStats();
   const { user } = useAuth();
+
+  // Ensure user statistics table has all required fields
+  useEffect(() => {
+    if (user) {
+      // Check if user statistics exist and update if needed
+      const checkUserStats = async () => {
+        try {
+          const { data, error } = await supabase
+            .from('user_statistics')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+            
+          if (error) {
+            if (error.code === 'PGRST116') {
+              // No records found, create initial stats
+              await supabase.from('user_statistics').insert({
+                user_id: user.id,
+                points: 10,
+                followers_gained: 0,
+                ideas_generated: 0,
+                analyses_completed: 0,
+                videos_shared: 0,
+                daily_challenges_completed: 0
+              });
+            } else {
+              console.error("Error checking user stats:", error);
+            }
+          } else if (data) {
+            // Make sure all fields exist
+            const updates: any = {};
+            let needsUpdate = false;
+            
+            if (data.videos_shared === undefined || data.videos_shared === null) {
+              updates.videos_shared = 0;
+              needsUpdate = true;
+            }
+            
+            if (data.daily_challenges_completed === undefined || data.daily_challenges_completed === null) {
+              updates.daily_challenges_completed = 0;
+              needsUpdate = true;
+            }
+            
+            if (needsUpdate) {
+              await supabase
+                .from('user_statistics')
+                .update(updates)
+                .eq('user_id', user.id);
+            }
+          }
+        } catch (err) {
+          console.error("Error handling user stats:", err);
+        }
+      };
+      
+      checkUserStats();
+    }
+  }, [user]);
 
   return (
     <DashboardLayout>

@@ -60,26 +60,71 @@ export const useUserStats = () => {
     };
 
     fetchStats();
+    
+    // Set up realtime subscription to user statistics updates
+    if (user) {
+      const statsChannel = supabase
+        .channel('user-stats-changes')
+        .on('postgres_changes', 
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'user_statistics',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            console.log('Stats updated via realtime:', payload);
+            // Update our local state with the new data
+            if (payload.new) {
+              setStats(prev => ({
+                ...prev,
+                points: payload.new.points || prev.points,
+                followers_gained: payload.new.followers_gained || prev.followers_gained,
+                ideas_generated: payload.new.ideas_generated || prev.ideas_generated,
+                analyses_completed: payload.new.analyses_completed || prev.analyses_completed,
+                videos_shared: payload.new.videos_shared || prev.videos_shared,
+                daily_challenges_completed: payload.new.daily_challenges_completed || prev.daily_challenges_completed
+              }));
+            }
+          }
+        )
+        .subscribe();
+        
+      return () => {
+        supabase.removeChannel(statsChannel);
+      };
+    }
   }, [user]);
 
   const updateStat = async (field: keyof UserStats, value: number) => {
-    if (!user) return;
+    if (!user) return false;
 
     try {
+      // Check if the database has a videos_shared column - some users may not have this yet
+      const hasField = field === 'videos_shared' || field === 'daily_challenges_completed';
+      
+      // Only update fields that exist in the database
+      const updateObject = {
+        [field]: value,
+        updated_at: new Date().toISOString()
+      };
+
+      // Update the database
       const { error } = await supabase
         .from('user_statistics')
-        .update({ [field]: value })
+        .update(updateObject)
         .eq('user_id', user.id);
 
       if (error) throw error;
 
+      // Also update our local state
       setStats(prev => ({ ...prev, [field]: value }));
+      return true;
     } catch (err: any) {
       console.error(`Error updating ${field}:`, err);
       setError(err.message);
       return false;
     }
-    return true;
   };
 
   const incrementStat = async (field: keyof UserStats, amount: number = 1) => {
