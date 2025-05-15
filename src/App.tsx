@@ -13,7 +13,6 @@ import HashtagGenerator from "@/pages/HashtagGenerator";
 import ProfileAnalysis from "@/pages/ProfileAnalysis";
 import DailyChallenge from "@/pages/DailyChallenge";
 import ConnectEarn from "@/pages/ConnectEarn";
-import LikesViews from "@/pages/LikesViews";
 import NotFound from "@/pages/NotFound";
 import MyProfile from "@/pages/MyProfile";
 import Admin from "@/pages/Admin";
@@ -69,14 +68,6 @@ function App() {
               element={
                 <PrivateRoute>
                   <ProfileAnalysis />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/likes-views"
-              element={
-                <PrivateRoute>
-                  <LikesViews />
                 </PrivateRoute>
               }
             />

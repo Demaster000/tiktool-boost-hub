@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import FeatureCard from "@/components/FeatureCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Hash, TrendingUp, User, Video, ThumbsUp, Award } from "lucide-react";
+import { Hash, TrendingUp, User, Video, Award } from "lucide-react";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,7 +33,6 @@ const Dashboard = () => {
                 followers_gained: 0,
                 ideas_generated: 0,
                 analyses_completed: 0,
-                videos_shared: 0,
                 daily_challenges_completed: 0
               });
             } else {
@@ -43,11 +42,6 @@ const Dashboard = () => {
             // Make sure all fields exist
             const updates: any = {};
             let needsUpdate = false;
-            
-            if (data.videos_shared === undefined || data.videos_shared === null) {
-              updates.videos_shared = 0;
-              needsUpdate = true;
-            }
             
             if (data.daily_challenges_completed === undefined || data.daily_challenges_completed === null) {
               updates.daily_challenges_completed = 0;
@@ -112,14 +106,6 @@ const Dashboard = () => {
           />
           
           <FeatureCard 
-            title="Ganhe Likes e Views" 
-            description="Compartilhe seus vídeos e receba curtidas e visualizações da comunidade."
-            icon={<ThumbsUp className="text-tiktool-pink" />}
-            to="/likes-views"
-            gradient="pink"
-          />
-          
-          <FeatureCard 
             title="Desafio Diário" 
             description="Complete desafios diários para ganhar pontos e conquistar badges."
             icon={<Award className="text-tiktool-teal" />}
@@ -158,12 +144,6 @@ const Dashboard = () => {
                   <p className="text-sm text-muted-foreground mb-1">Análises Feitas</p>
                   <p className="text-2xl font-bold">
                     {loading ? '...' : stats?.analyses_completed || 0}
-                  </p>
-                </div>
-                <div className="bg-tiktool-dark p-4 rounded-md">
-                  <p className="text-sm text-muted-foreground mb-1">Vídeos Compartilhados</p>
-                  <p className="text-2xl font-bold">
-                    {loading ? '...' : stats?.videos_shared || 0}
                   </p>
                 </div>
                 <div className="bg-tiktool-dark p-4 rounded-md">

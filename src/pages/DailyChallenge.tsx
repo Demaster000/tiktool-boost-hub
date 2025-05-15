@@ -62,7 +62,6 @@ const DailyChallenge = () => {
     if (!user) return;
     
     try {
-      // Get today's challenges - we'll use our fixed challenges instead
       // Define fixed challenges
       const fixedChallenges = [
         {
@@ -75,29 +74,29 @@ const DailyChallenge = () => {
           active: true
         },
         {
-          id: "2",
-          title: "Visualize e curta 5 vídeos",
-          description: "Visualize e curta 5 vídeos na ferramenta 'Ganhe Likes e Visualizações'",
-          type: "view_like_videos",
-          goal: 5,
-          points: 10,
-          active: true
-        },
-        {
-          id: "3",
-          title: "Compartilhe um vídeo",
-          description: "Compartilhe um vídeo na ferramenta 'Ganhe Likes e Visualizações'",
-          type: "share_video",
-          goal: 1,
-          points: 10,
-          active: true
-        },
-        {
           id: "4",
           title: "Analise seu perfil",
           description: "Faça uma análise do seu perfil na ferramenta 'Análise de Perfil'",
           type: "analyze_profile",
           goal: 1,
+          points: 10,
+          active: true
+        },
+        {
+          id: "5",
+          title: "Gere ideias para vídeos",
+          description: "Gere ideias para seus vídeos usando a ferramenta 'Ideias para Vídeo'",
+          type: "generate_ideas",
+          goal: 3,
+          points: 10,
+          active: true
+        },
+        {
+          id: "6",
+          title: "Encontre hashtags populares",
+          description: "Busque hashtags populares na ferramenta 'Gerador de Hashtags'",
+          type: "find_hashtags",
+          goal: 2,
           points: 10,
           active: true
         }
@@ -237,12 +236,14 @@ const DailyChallenge = () => {
       case "follow_users":
         navigate("/connect-earn");
         break;
-      case "view_like_videos":
-      case "share_video":
-        navigate("/likes-views");
-        break;
       case "analyze_profile":
         navigate("/profile-analysis");
+        break;
+      case "generate_ideas":
+        navigate("/video-ideas");
+        break;
+      case "find_hashtags":
+        navigate("/hashtag-generator");
         break;
       default:
         // Stay on current page if no matching tool

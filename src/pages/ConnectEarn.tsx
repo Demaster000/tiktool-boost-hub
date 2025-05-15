@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +22,7 @@ interface ProfileData {
   id: number;
   username: string;
   followers: number;
+  profileUrl?: string; // Adição do campo para URL do perfil
 }
 
 const ConnectEarn = () => {
@@ -28,6 +30,7 @@ const ConnectEarn = () => {
   const { stats, updateStat, refreshStats } = useUserStats();
   const { status: subscriptionStatus, loading: subscriptionLoading, checkSubscription } = useSubscription();
   const [profileUsername, setProfileUsername] = useState("");
+  const [profileUrl, setProfileUrl] = useState(""); // Campo para URL do perfil
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
   const [isProfileActive, setIsProfileActive] = useState(false);
   const [isWaitingConfirmation, setIsWaitingConfirmation] = useState<number | null>(null);
@@ -66,9 +69,24 @@ const ConnectEarn = () => {
         // Simulate fetching profiles - in a real app, you would fetch from Supabase
         // This is a placeholder for demonstration
         const mockProfiles = [
-          { id: 1, username: "@usuario1", followers: 1200 },
-          { id: 2, username: "@creator123", followers: 850 },
-          { id: 3, username: "@tiktoker", followers: 3400 }
+          { 
+            id: 1, 
+            username: "@usuario1", 
+            followers: 1200,
+            profileUrl: "https://www.tiktok.com/@usuario1"
+          },
+          { 
+            id: 2, 
+            username: "@creator123", 
+            followers: 850,
+            profileUrl: "https://www.tiktok.com/@creator123"
+          },
+          { 
+            id: 3, 
+            username: "@tiktoker", 
+            followers: 3400,
+            profileUrl: "https://www.tiktok.com/@tiktoker"
+          }
         ];
         setAvailableProfiles(mockProfiles);
       } catch (error) {
@@ -108,8 +126,16 @@ const ConnectEarn = () => {
   useEffect(() => {
     const savedProfile = localStorage.getItem("activeProfile");
     if (savedProfile) {
-      setActiveProfile(savedProfile);
-      setIsProfileActive(true);
+      try {
+        const profileData = JSON.parse(savedProfile);
+        setActiveProfile(profileData.username);
+        setProfileUrl(profileData.profileUrl || "");
+        setIsProfileActive(true);
+      } catch {
+        // Caso seja apenas string (versão antiga)
+        setActiveProfile(savedProfile);
+        setIsProfileActive(true);
+      }
     }
   }, []);
 
@@ -132,15 +158,26 @@ const ConnectEarn = () => {
       return;
     }
 
+    // Verificar se foi fornecida uma URL ou criar uma padrão
+    const finalProfileUrl = profileUrl || `https://www.tiktok.com/${profileUsername.startsWith('@') ? profileUsername : '@' + profileUsername}`;
+
+    // Salvar tanto o nome de usuário quanto a URL
+    const profileData = {
+      username: profileUsername,
+      profileUrl: finalProfileUrl
+    };
+    
     setActiveProfile(profileUsername);
+    setProfileUrl(finalProfileUrl);
     setIsProfileActive(true);
-    localStorage.setItem("activeProfile", profileUsername);
+    localStorage.setItem("activeProfile", JSON.stringify(profileData));
     
     // Add the new profile to available profiles
     const newProfile = {
       id: Date.now(), // Use timestamp as unique ID
       username: profileUsername,
-      followers: 0
+      followers: 0,
+      profileUrl: finalProfileUrl
     };
     
     // Add to beginning of array for immediate visibility
@@ -155,6 +192,7 @@ const ConnectEarn = () => {
     // Switch to the follow tab to show the newly added profile
     setActiveTab("follow");
     setProfileUsername("");
+    setProfileUrl("");
   };
 
   const handlePauseProfile = () => {
@@ -179,6 +217,7 @@ const ConnectEarn = () => {
 
   const handleRemoveProfile = () => {
     setActiveProfile(null);
+    setProfileUrl("");
     setIsProfileActive(false);
     localStorage.removeItem("activeProfile");
     
@@ -194,7 +233,7 @@ const ConnectEarn = () => {
     setShowSuccessMessage(true);
   };
 
-  const handleFollow = (profileId: number) => {
+  const handleFollow = (profile: ProfileData) => {
     // Check daily points limit for non-premium users
     if (!isPremium && subscriptionStatus.points_earned_today && subscriptionStatus.points_earned_today >= 30) {
       toast({
@@ -205,7 +244,7 @@ const ConnectEarn = () => {
       return;
     }
 
-    setIsWaitingConfirmation(profileId);
+    setIsWaitingConfirmation(profile.id);
     
     // Start countdown
     let seconds = 5;
@@ -220,8 +259,9 @@ const ConnectEarn = () => {
       }
     }, 1000);
     
-    // Simulate opening TikTok in a new window
-    window.open("https://www.tiktok.com/", "_blank");
+    // Abrir o perfil do usuário em uma nova janela
+    const profileUrl = profile.profileUrl || `https://www.tiktok.com/${profile.username.startsWith('@') ? profile.username : '@' + profile.username}`;
+    window.open(profileUrl, "_blank");
   };
 
   const handleConfirmFollow = async () => {
@@ -638,6 +678,16 @@ const ConnectEarn = () => {
                             <p className="text-sm text-muted-foreground">
                               {isProfileActive ? 'Recebendo seguidores' : 'Não está recebendo seguidores'}
                             </p>
+                            {profileUrl && (
+                              <a 
+                                href={profileUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-sm text-tiktool-teal hover:underline mt-1 inline-block"
+                              >
+                                Ver perfil
+                              </a>
+                            )}
                           </div>
                         </div>
                         
@@ -692,21 +742,37 @@ const ConnectEarn = () => {
                         Insira seu nome de usuário do TikTok para receber seguidores.
                         Cada seguidor conquistado consumirá 1 ponto do seu saldo.
                       </p>
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <div className="flex-1">
-                          <Input
-                            placeholder="@seuusername"
-                            value={profileUsername}
-                            onChange={(e) => setProfileUsername(e.target.value)}
-                          />
+                      
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="flex-1">
+                            <Input
+                              placeholder="@seuusername"
+                              value={profileUsername}
+                              onChange={(e) => setProfileUsername(e.target.value)}
+                            />
+                          </div>
                         </div>
-                        <Button 
-                          onClick={handleRegisterProfile}
-                          disabled={stats.points <= 0}
-                          className="sm:flex-shrink-0"
-                        >
-                          Cadastrar
-                        </Button>
+                        
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="flex-1">
+                            <Input
+                              placeholder="Link do seu perfil (opcional)"
+                              value={profileUrl}
+                              onChange={(e) => setProfileUrl(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Ex: https://www.tiktok.com/@seuusername
+                            </p>
+                          </div>
+                          <Button 
+                            onClick={handleRegisterProfile}
+                            disabled={stats.points <= 0}
+                            className="sm:flex-shrink-0"
+                          >
+                            Cadastrar
+                          </Button>
+                        </div>
                       </div>
                     </div>
                     
@@ -762,7 +828,7 @@ const ConnectEarn = () => {
                           </div>
                         ) : (
                           <Button 
-                            onClick={() => handleFollow(profile.id)}
+                            onClick={() => handleFollow(profile)}
                             disabled={stats.points <= 0}
                             className="sm:flex-shrink-0"
                           >
