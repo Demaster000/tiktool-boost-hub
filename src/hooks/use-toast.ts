@@ -1,3 +1,4 @@
+
 import * as React from "react"
 
 import type {
@@ -12,11 +13,9 @@ export type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
-  action?: ToasterToastActionElement
+  action?: React.ReactElement
   open: boolean
 }
-
-export type ToasterToastActionElement = React.ReactElement<typeof ToastActionElement>
 
 let count = 0
 
@@ -74,8 +73,6 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
         addToRemoveQueue(toastId)
       }
@@ -117,8 +114,9 @@ function dispatch(action: Action) {
   })
 }
 
-interface Toast extends Omit<ToasterToast, "id"> {
+interface Toast extends Omit<ToasterToast, "id" | "open"> {
   id?: string
+  open?: boolean
 }
 
 function toast({ ...props }: Toast) {
