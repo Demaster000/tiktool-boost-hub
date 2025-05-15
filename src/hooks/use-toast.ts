@@ -12,6 +12,7 @@ export type Toast = {
   description?: React.ReactNode
   action?: ToastActionElement
   variant?: "default" | "destructive"
+  open?: boolean
 }
 
 const actionTypes = {
@@ -116,16 +117,7 @@ function dispatch(action: Action) {
   })
 }
 
-interface Toast {
-  id: string
-  title?: React.ReactNode
-  description?: React.ReactNode
-  action?: React.ReactElement
-  variant?: "default" | "destructive"
-  open?: boolean
-}
-
-function toast({ title, description, variant, action }: Omit<Toast, "id">) {
+function toast({ title, description, variant, action }: Omit<Toast, "id" | "open">) {
   const id = generateId()
 
   const update = (props: Omit<Toast, "id">) =>
