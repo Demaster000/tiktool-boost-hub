@@ -72,7 +72,8 @@ const ConnectEarn = () => {
       toast({
         title: "Erro ao carregar perfis",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
+        open: true
       });
     } finally {
       setLoading(false);
@@ -143,7 +144,8 @@ const ConnectEarn = () => {
         if (completed && !challenge.completed) {
           toast({
             title: "Desafio concluído! 🎉",
-            description: "Você completou o desafio de seguir 30 pessoas!"
+            description: "Você completou o desafio de seguir 30 pessoas!",
+            open: true
           });
         }
       } else if (challengeError.code === 'PGRST116') {
@@ -160,13 +162,15 @@ const ConnectEarn = () => {
       
       toast({
         title: "Perfil seguido com sucesso!",
-        description: "Você ganhou +2 pontos"
+        description: "Você ganhou +2 pontos",
+        open: true
       });
     } catch (error: any) {
       toast({
         title: "Erro ao seguir perfil",
         description: error.message,
-        variant: "destructive"
+        variant: "destructive",
+        open: true
       });
     }
   };
