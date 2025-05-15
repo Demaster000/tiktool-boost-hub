@@ -132,6 +132,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_followed_profiles: {
+        Row: {
+          followed_at: string | null
+          id: string
+          profile_id: number
+          user_id: string
+        }
+        Insert: {
+          followed_at?: string | null
+          id?: string
+          profile_id: number
+          user_id: string
+        }
+        Update: {
+          followed_at?: string | null
+          id?: string
+          profile_id?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_profiles: {
         Row: {
           active: boolean
