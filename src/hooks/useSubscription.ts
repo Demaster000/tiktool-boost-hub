@@ -1,16 +1,17 @@
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { SubscriptionStatus } from '@/types/subscription';
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { SubscriptionStatus } from "@/types/subscription";
+import { useAuth } from "@/contexts/AuthContext";
 
-export const useSubscription = () => {
+const useSubscription = () => {
   const { user } = useAuth();
   const [status, setStatus] = useState<SubscriptionStatus>({
     subscribed: false,
     subscription_tier: null,
     subscription_end: null,
-    points_earned_today: 0
+    points_earned_today: 0,
+    was_upgraded: false
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -18,27 +19,31 @@ export const useSubscription = () => {
   const checkSubscription = async () => {
     if (!user) {
       setLoading(false);
-      return false;
+      return;
     }
 
     try {
-      setLoading(true);
+      console.log("Checking subscription status for user:", user.id);
       const { data, error } = await supabase.functions.invoke('check-subscription');
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
-      console.log('Subscription check result:', data);
-
-      setStatus({
-        subscribed: data?.subscribed || false,
-        subscription_tier: data?.subscription_tier || null,
-        subscription_end: data?.subscription_end || null,
-        points_earned_today: data?.points_earned_today || 0
-      });
+      if (data) {
+        console.log("Subscription check response:", data);
+        setStatus({
+          subscribed: data.subscribed || false,
+          subscription_tier: data.subscription_tier || null,
+          subscription_end: data.subscription_end || null,
+          points_earned_today: data.points_earned_today || 0,
+          was_upgraded: data.was_upgraded || false
+        });
+      }
       
       return true;
     } catch (err: any) {
-      console.error('Error checking subscription status:', err);
+      console.error("Error checking subscription:", err);
       setError(err.message);
       return false;
     } finally {
@@ -48,45 +53,9 @@ export const useSubscription = () => {
 
   useEffect(() => {
     checkSubscription();
-    
-    // Check subscription status every 30 seconds while on the page
-    const interval = setInterval(() => {
-      checkSubscription();
-    }, 30000); // Check every 30 seconds
-    
-    return () => clearInterval(interval);
   }, [user]);
 
-  // Also check when URL changes (after checkout)
-  useEffect(() => {
-    const checkUrlParams = () => {
-      const url = new URL(window.location.href);
-      const success = url.searchParams.get('success');
-      
-      if (success === 'true') {
-        checkSubscription();
-        
-        // Clear URL params after successful checkout
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
-    
-    checkUrlParams();
-    
-    // Add event listener for URL changes
-    window.addEventListener('popstate', checkUrlParams);
-    
-    return () => {
-      window.removeEventListener('popstate', checkUrlParams);
-    };
-  }, []);
-
-  return {
-    status,
-    loading,
-    error,
-    checkSubscription
-  };
+  return { status, loading, error, checkSubscription };
 };
 
 export default useSubscription;

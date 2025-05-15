@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -53,7 +54,7 @@ const DailyChallenge = () => {
   const [dailyLimitReached, setDailyLimitReached] = useState(false);
   
   const { user } = useAuth();
-  const { stats, updateStat, incrementStat } = useUserStats();
+  const { stats, updateStat, incrementStat, refreshStats } = useUserStats();
   const navigate = useNavigate();
 
   // Fetch daily challenges
@@ -403,7 +404,7 @@ const DailyChallenge = () => {
           : `Progresso: ${newProgress}/${challenge.goal}`,
       });
       
-      // Redirect to appropriate tool after a short delay
+      // Always redirect to appropriate tool after a short delay
       setTimeout(() => {
         redirectToTool(challenge.type);
       }, 1000);
@@ -588,9 +589,36 @@ const DailyChallenge = () => {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Desafio Diário Tiktool</h1>
-          <p className="text-muted-foreground">Complete desafios diários para ganhar pontos e badges</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Desafio Diário Tiktool</h1>
+            <p className="text-muted-foreground">Complete desafios diários para ganhar pontos e badges</p>
+          </div>
+          
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => {
+              fetchChallenges();
+              fetchStreakInfo();
+              fetchBadges();
+              refreshStats();
+              toast({
+                title: "Dados atualizados",
+                description: "Seus desafios foram atualizados"
+              });
+            }}
+            disabled={loading}
+            title="Atualizar desafios"
+            className="flex-shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`lucide lucide-refresh-cw ${loading ? 'animate-spin' : ''}`}>
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+              <path d="M21 3v5h-5"/>
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+              <path d="M3 21v-5h5"/>
+            </svg>
+          </Button>
         </div>
         
         <Card className="bg-tiktool-gray border-tiktool-gray/50">

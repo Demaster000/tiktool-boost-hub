@@ -25,8 +25,8 @@ interface ProfileData {
 
 const ConnectEarn = () => {
   const { user, isPremium } = useAuth();
-  const { stats, updateStat } = useUserStats();
-  const { status: subscriptionStatus, loading: subscriptionLoading } = useSubscription();
+  const { stats, updateStat, refreshStats } = useUserStats();
+  const { status: subscriptionStatus, loading: subscriptionLoading, checkSubscription } = useSubscription();
   const [profileUsername, setProfileUsername] = useState("");
   const [activeProfile, setActiveProfile] = useState<string | null>(null);
   const [isProfileActive, setIsProfileActive] = useState(false);
@@ -43,10 +43,19 @@ const ConnectEarn = () => {
   const [availableProfiles, setAvailableProfiles] = useState<ProfileData[]>([]);
   const { toast } = useToast();
   
-  // Fetch user premium status and daily points earned
+  // Fetch user data on component mount and set up refresh interval
   useEffect(() => {
     if (user) {
-      // Uses the isPremium flag from AuthContext
+      // Initial refresh of stats to ensure they're up-to-date
+      refreshStats();
+      
+      // Set up periodic refresh
+      const refreshInterval = setInterval(() => {
+        refreshStats();
+        checkSubscription();
+      }, 60000); // Refresh every minute
+      
+      return () => clearInterval(refreshInterval);
     }
   }, [user, isPremium]);
 
@@ -482,21 +491,43 @@ const ConnectEarn = () => {
             <CardDescription>Use pontos para ganhar seguidores</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <p className="text-4xl font-bold">{stats.points} pontos</p>
-              <p className="text-sm text-muted-foreground">1 ponto = 1 seguidor</p>
-              
-              {!isPremium && subscriptionStatus.points_earned_today !== undefined && (
-                <div className="mt-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="text-amber-400 h-4 w-4" />
-                    <span>
-                      {subscriptionStatus.points_earned_today}/30 pontos ganhos hoje
-                      {subscriptionStatus.points_earned_today >= 30 && " (limite atingido)"}
-                    </span>
+            <div className="flex items-center gap-3">
+              <div>
+                <p className="text-4xl font-bold">{stats?.points || 0} pontos</p>
+                <p className="text-sm text-muted-foreground">1 ponto = 1 seguidor</p>
+                
+                {!isPremium && subscriptionStatus.points_earned_today !== undefined && (
+                  <div className="mt-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="text-amber-400 h-4 w-4" />
+                      <span>
+                        {subscriptionStatus.points_earned_today}/30 pontos ganhos hoje
+                        {subscriptionStatus.points_earned_today >= 30 && " (limite atingido)"}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+              <Button 
+                variant="outline" 
+                size="icon" 
+                className="ml-2" 
+                onClick={() => {
+                  refreshStats();
+                  checkSubscription();
+                  toast({
+                    title: "Dados atualizados",
+                    description: "Seu saldo de pontos foi atualizado"
+                  });
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-refresh-cw">
+                  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                  <path d="M21 3v5h-5"/>
+                  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                  <path d="M3 21v-5h5"/>
+                </svg>
+              </Button>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
               <Popover open={showPointsPopover} onOpenChange={setShowPointsPopover}>
